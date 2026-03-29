@@ -2,8 +2,15 @@
 
 import { useState } from "react";
 
+type Message = {
+  id: number;
+  sender: "user" | "marty";
+  text: string;
+  time: string;
+};
+
 export default function Page() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
       sender: "marty",
@@ -14,13 +21,59 @@ export default function Page() {
 
   const [input, setInput] = useState("");
 
+  const fetchReply = async (userText: string) => {
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: userText }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch MARTY response");
+      }
+
+      const data = await res.json();
+
+      const reply: Message = {
+        id: Date.now() + 1,
+        sender: "marty",
+        text: data.reply || "Nah. Try again.",
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+
+      setMessages((prev) => [...prev, reply]);
+    } catch (error) {
+      console.error(error);
+
+      const fallback: Message = {
+        id: Date.now() + 1,
+        sender: "marty",
+        text: "I’m here, but something broke on the back end.",
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+
+      setMessages((prev) => [...prev, fallback]);
+    }
+  };
+
   const sendMessage = () => {
     if (!input.trim()) return;
 
-    const newMessage = {
+    const userText = input.trim();
+
+    const newMessage: Message = {
       id: Date.now(),
       sender: "user",
-      text: input,
+      text: userText,
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -30,37 +83,19 @@ export default function Page() {
     setMessages((prev) => [...prev, newMessage]);
     setInput("");
 
-    // TEMP MARTY RESPONSE (we'll upgrade this later)
-    setTimeout(() => {
-      const reply = {
-        id: Date.now() + 1,
-        sender: "marty",
-        text: "That sounds familiar. What are you avoiding?",
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-
-      setMessages((prev) => [...prev, reply]);
-    }, 800);
+    fetchReply(userText);
   };
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="mx-auto flex min-h-screen max-w-md flex-col border-x border-white/10 bg-black/40 backdrop-blur-sm">
-
-        {/* HEADER */}
         <header className="border-b border-white/10 px-4 py-4">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40">
             MARTY
           </p>
-          <h1 className="text-lg font-semibold">
-            Not therapy. Still honest.
-          </h1>
+          <h1 className="text-lg font-semibold">Not therapy. Still honest.</h1>
         </header>
 
-        {/* CHAT */}
         <section className="flex-1 space-y-4 overflow-y-auto px-4 py-6">
           {messages.map((message) => {
             const isUser = message.sender === "user";
@@ -68,9 +103,7 @@ export default function Page() {
             return (
               <div
                 key={message.id}
-                className={`flex ${
-                  isUser ? "justify-end" : "justify-start"
-                }`}
+                className={`flex ${isUser ? "justify-end" : "justify-start"}`}
               >
                 <div className="max-w-[80%]">
                   <div
@@ -83,7 +116,11 @@ export default function Page() {
                     {message.text}
                   </div>
 
-                  <p className="mt-1 text-[11px] text-white/40">
+                  <p
+                    className={`mt-1 text-[11px] text-white/40 ${
+                      isUser ? "text-right" : "text-left"
+                    }`}
+                  >
                     {message.time}
                   </p>
                 </div>
@@ -92,7 +129,6 @@ export default function Page() {
           })}
         </section>
 
-        {/* INPUT */}
         <footer className="border-t border-white/10 p-3">
           <div className="flex gap-2">
             <input
