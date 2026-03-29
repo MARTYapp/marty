@@ -1,84 +1,89 @@
+"use client";
+
+import { useState } from "react";
+
 export default function Page() {
-  const messages = [
+  const [messages, setMessages] = useState([
     {
       id: 1,
       sender: "marty",
       text: "Say it out loud.",
       time: "9:41 PM",
     },
-    {
-      id: 2,
+  ]);
+
+  const [input, setInput] = useState("");
+
+  const sendMessage = () => {
+    if (!input.trim()) return;
+
+    const newMessage = {
+      id: Date.now(),
       sender: "user",
-      text: "I think I’m sabotaging my relationships again.",
-      time: "9:42 PM",
-    },
-    {
-      id: 3,
-      sender: "marty",
-      text: "Maybe.\nWhat happened this time?",
-      time: "9:42 PM",
-    },
-    {
-      id: 4,
-      sender: "user",
-      text: "I pulled away before he could get too close.",
-      time: "9:43 PM",
-    },
-    {
-      id: 5,
-      sender: "marty",
-      text: "So you left first.\nThat’s not protection if it keeps costing you intimacy.",
-      time: "9:43 PM",
-    },
-  ];
+      text: input,
+      time: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+
+    setMessages((prev) => [...prev, newMessage]);
+    setInput("");
+
+    // TEMP MARTY RESPONSE (we'll upgrade this later)
+    setTimeout(() => {
+      const reply = {
+        id: Date.now() + 1,
+        sender: "marty",
+        text: "That sounds familiar. What are you avoiding?",
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+
+      setMessages((prev) => [...prev, reply]);
+    }, 800);
+  };
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="mx-auto flex min-h-screen max-w-md flex-col border-x border-white/10 bg-black/40 backdrop-blur-sm">
-        <header className="sticky top-0 z-10 border-b border-white/10 bg-black/70 px-4 py-4 backdrop-blur-md">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-white/40">
-                MARTY
-              </p>
-              <h1 className="text-lg font-semibold">Not therapy. Still honest.</h1>
-            </div>
-            <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
-              online
-            </div>
-          </div>
+
+        {/* HEADER */}
+        <header className="border-b border-white/10 px-4 py-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-white/40">
+            MARTY
+          </p>
+          <h1 className="text-lg font-semibold">
+            Not therapy. Still honest.
+          </h1>
         </header>
 
+        {/* CHAT */}
         <section className="flex-1 space-y-4 overflow-y-auto px-4 py-6">
-          <div className="mx-auto w-fit rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/50">
-            Tonight
-          </div>
-
           {messages.map((message) => {
             const isUser = message.sender === "user";
 
             return (
               <div
                 key={message.id}
-                className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                className={`flex ${
+                  isUser ? "justify-end" : "justify-start"
+                }`}
               >
-                <div className="max-w-[82%]">
+                <div className="max-w-[80%]">
                   <div
-                    className={`rounded-3xl px-4 py-3 text-[15px] leading-relaxed shadow-lg ${
+                    className={`rounded-3xl px-4 py-3 text-sm ${
                       isUser
-                        ? "rounded-br-md bg-white text-black"
-                        : "rounded-bl-md border border-white/10 bg-white/10 text-white"
+                        ? "bg-white text-black"
+                        : "border border-white/10 bg-white/10"
                     }`}
                   >
-                    {message.text.split("\n").map((line, index) => (
-                      <p key={index}>{line}</p>
-                    ))}
+                    {message.text}
                   </div>
-                  <p
-                    className={`mt-1 px-2 text-[11px] text-white/35 ${
-                      isUser ? "text-right" : "text-left"
-                    }`}
-                  >
+
+                  <p className="mt-1 text-[11px] text-white/40">
                     {message.time}
                   </p>
                 </div>
@@ -87,17 +92,23 @@ export default function Page() {
           })}
         </section>
 
-        <footer className="sticky bottom-0 border-t border-white/10 bg-black/80 px-4 py-3 backdrop-blur-md">
-          <div className="flex items-end gap-3">
-            <button className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10">
-              +
-            </button>
+        {/* INPUT */}
+        <footer className="border-t border-white/10 p-3">
+          <div className="flex gap-2">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Text MARTY..."
+              className="flex-1 rounded-full bg-white/10 px-4 py-2 text-sm outline-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") sendMessage();
+              }}
+            />
 
-            <div className="flex-1 rounded-[28px] border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/40">
-              Text MARTY...
-            </div>
-
-            <button className="rounded-full bg-white px-4 py-3 text-sm font-medium text-black transition hover:scale-[1.02]">
+            <button
+              onClick={sendMessage}
+              className="rounded-full bg-white px-4 py-2 text-sm text-black"
+            >
               Send
             </button>
           </div>
