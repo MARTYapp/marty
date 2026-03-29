@@ -14,7 +14,7 @@ export default function Page() {
     {
       id: 1,
       sender: "marty",
-      text: "Say it out loud.",
+      text: "What's going on?",
       time: "9:41 PM",
     },
   ]);
