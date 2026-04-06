@@ -1,16 +1,17 @@
 {
-    "name": "MARTY",
-    "short_name": "MARTY",
-    "description": "The accountability layer between impulse and consequence.",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#000000",
-    "theme_color": "#000000",
-    "icons": [
-      {
-        "src": "/icon.png",
-        "sizes": "512x512",
-        "type": "image/png"
-      }
-    ]
-  }
+  "name": "MARTY",
+  "short_name": "MARTY",
+  "description": "The accountability layer between impulse and consequence.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070b",
+  "theme_color": "#05070b",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
