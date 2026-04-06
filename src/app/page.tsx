@@ -136,9 +136,9 @@ export default function Page() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col lg:flex-row">
-        <section className="flex w-full flex-col justify-between border-b border-white/10 bg-black/40 backdrop-blur-sm lg:w-[320px] lg:border-b-0 lg:border-r">
+    <main className="min-h-screen h-dvh overflow-hidden bg-[#0a0a0a] text-white">
+      <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden lg:flex-row">
+        <section className="flex w-full shrink-0 flex-col justify-between border-b border-blue-500/20 bg-black/40 backdrop-blur-sm lg:h-full lg:w-[320px] lg:border-b-0 lg:border-r">
           <div className="border-b border-white/10 px-6 py-8">
             <p className="mb-2 text-xs uppercase tracking-[0.3em] text-white/45">
               MARTY
@@ -164,15 +164,15 @@ export default function Page() {
           </div>
         </section>
 
-        <section className="flex min-h-[70vh] flex-1 flex-col bg-black/20">
-          <header className="border-b border-white/10 px-4 py-4 sm:px-6">
+        <section className="flex min-h-0 flex-1 flex-col bg-black/20">
+          <header className="border-b border-blue-500/20 px-4 py-4 sm:px-6">
             <p className="text-xs uppercase tracking-[0.2em] text-white/40">
               MARTY
             </p>
             <h2 className="text-lg font-semibold">Not therapy. Still honest.</h2>
           </header>
 
-          <section className="flex-1 space-y-3 overflow-y-auto px-4 py-6 sm:px-6">
+          <section className="flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-6 sm:px-6">
             {messages.map((message) => {
               const isUser = message.sender === "user";
 
@@ -186,7 +186,7 @@ export default function Page() {
                       className={`rounded-3xl px-5 py-3.5 text-[15px] leading-relaxed sm:text-base ${
                         isUser
                           ? "bg-white text-black"
-                          : "border border-white/10 bg-white/10 text-white"
+                          : "border border-blue-500/20 bg-blue-500/10 text-white"
                       }`}
                     >
                       {message.text}
@@ -206,7 +206,7 @@ export default function Page() {
 
             {loading && (
               <div className="flex justify-start">
-                <div className="rounded-3xl border border-white/10 bg-white/10 px-5 py-3.5 text-[15px] text-white/60 sm:text-base">
+                <div className="rounded-3xl border border-blue-500/20 bg-blue-500/10 px-5 py-3.5 text-[15px] text-white/60 sm:text-base">
                   ...
                 </div>
               </div>
@@ -214,13 +214,13 @@ export default function Page() {
             <div ref={bottomRef} />
           </section>
 
-          <footer className="border-t border-white/10 p-3 sm:px-6 sm:py-4">
+          <footer className="shrink-0 border-t border-blue-500/20 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-6 sm:py-4">
             <div className="flex items-center gap-2 sm:gap-3">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Text MARTY..."
-                className="flex-1 rounded-full border border-white/10 bg-white/5 px-5 py-3.5 text-sm text-white outline-none backdrop-blur-md placeholder:text-white/35 sm:text-base"
+                className="min-w-0 flex-1 rounded-full border border-blue-500/20 bg-white/5 px-4 py-3.5 text-sm text-white outline-none backdrop-blur-md placeholder:text-white/35 focus:border-blue-500/40 sm:px-5 sm:text-base"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") sendMessage();
                 }}
@@ -229,7 +229,7 @@ export default function Page() {
               <button
                 onClick={sendMessage}
                 disabled={loading}
-                className="rounded-full bg-white px-5 py-3.5 text-sm text-black shadow-md transition hover:opacity-90 disabled:opacity-50 sm:px-6 sm:text-base"
+                className="shrink-0 rounded-full bg-blue-600 px-4 py-3.5 text-sm text-white shadow-md transition hover:bg-blue-500 disabled:opacity-50 sm:px-6 sm:text-base"
               >
                 Send
               </button>
