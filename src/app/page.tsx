@@ -31,7 +31,7 @@ const formatTime = () =>
 const starterMessage = (): Message => ({
   id: Date.now(),
   sender: "marty",
-  text: "What's going on?",
+  text: "Start with what’s true, not what sounds good.",
   time: formatTime(),
 });
 
