@@ -1,18 +1,81 @@
 @import "tailwindcss";
 
-html,
+:root {
+  color-scheme: dark;
+  --app-bg: #05070b;
+  --app-text: #f5f7fb;
+}
+
+html {
+  margin: 0;
+  padding: 0;
+  background: var(--app-bg);
+  color: var(--app-text);
+  min-height: 100%;
+  height: 100%;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   padding: 0;
-  background: #0a0a0a;
-  color: #f5f5f5;
+  background: var(--app-bg);
+  color: var(--app-text);
   min-height: 100%;
+  height: 100%;
+  overscroll-behavior-y: none;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   box-sizing: border-box;
 }
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 0;
+}
+
+textarea {
+  resize: none;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+#\__next {
+  min-height: 100%;
 }

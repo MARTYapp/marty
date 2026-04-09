@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Message = {
   id: number;
@@ -57,6 +57,10 @@ const getConversationTitle = (messages: Message[]) => {
     : firstUserMessage.text;
 };
 
+const normalizeReplyText = (value: string) => {
+  return value.replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
+};
+
 export default function Page() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string>("");
@@ -66,12 +70,21 @@ export default function Page() {
   const [hydrated, setHydrated] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   const currentConversation = useMemo(() => {
     return conversations.find((conversation) => conversation.id === currentChatId);
   }, [conversations, currentChatId]);
 
   const messages = currentConversation?.messages || [];
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -87,11 +100,16 @@ export default function Page() {
       }
     }
 
-    const freshConversation = createConversation();
-    const nextConversations = [freshConversation, ...parsed].slice(0, 12);
+    if (parsed.length > 0) {
+      const sorted = [...parsed].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
+      setConversations(sorted);
+      setCurrentChatId(sorted[0].id);
+    } else {
+      const freshConversation = createConversation();
+      setConversations([freshConversation]);
+      setCurrentChatId(freshConversation.id);
+    }
 
-    setConversations(nextConversations);
-    setCurrentChatId(freshConversation.id);
     setHydrated(true);
   }, []);
 
@@ -105,17 +123,30 @@ export default function Page() {
   }, [conversations, hydrated]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentConversation, loading, currentChatId]);
+    if (typeof window === "undefined") return;
 
-  const toApiConversation = (
-    conversation: Message[]
-  ): ApiConversationMessage[] => {
-    return conversation.slice(-12).map((message) => ({
-      role: message.sender === "user" ? "user" : "assistant",
-      content: message.text,
-    }));
-  };
+    const updateViewportHeight = () => {
+      const nextHeight = window.visualViewport?.height ?? window.innerHeight;
+      setViewportHeight(nextHeight);
+    };
+
+    updateViewportHeight();
+
+    window.visualViewport?.addEventListener("resize", updateViewportHeight);
+    window.addEventListener("resize", updateViewportHeight);
+    window.addEventListener("orientationchange", updateViewportHeight);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportHeight);
+      window.removeEventListener("resize", updateViewportHeight);
+      window.removeEventListener("orientationchange", updateViewportHeight);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentChatId) return;
+    scrollToBottom(messages.length > 1 ? "smooth" : "auto");
+  }, [currentChatId, messages.length, loading, scrollToBottom]);
 
   const updateConversationMessages = (
     chatId: string,
@@ -149,6 +180,12 @@ export default function Page() {
     setSidebarOpen(false);
   };
 
+  const handleComposerFocus = () => {
+    setTimeout(() => {
+      scrollToBottom("auto");
+    }, 180);
+  };
+
   const fetchReply = async (userText: string, conversation: Message[], chatId: string) => {
     setLoading(true);
 
@@ -161,6 +198,13 @@ export default function Page() {
         body: JSON.stringify({
           message: userText,
           conversation: toApiConversation(conversation),
+          mode: "supportive-directive",
+          responseStyle: {
+            maxQuestions: 1,
+            preferStatements: true,
+            conversational: true,
+            concise: true,
+          },
         }),
       });
 
@@ -173,7 +217,7 @@ export default function Page() {
       const reply: Message = {
         id: Date.now() + 1,
         sender: "marty",
-        text: data.reply || "Nah. Try again.",
+        text: normalizeReplyText(data.reply || "Nah. Try again."),
         time: formatTime(),
       };
 
@@ -194,10 +238,19 @@ export default function Page() {
     }
   };
 
-  const sendMessage = () => {
-    if (!input.trim() || loading || !currentChatId) return;
+  const toApiConversation = (
+    conversation: Message[]
+  ): ApiConversationMessage[] => {
+    return conversation.slice(-12).map((message) => ({
+      role: message.sender === "user" ? "user" : "assistant",
+      content: message.text,
+    }));
+  };
 
+  const sendMessage = () => {
     const userText = input.trim();
+
+    if (!userText || loading || !currentChatId) return;
 
     const newMessage: Message = {
       id: Date.now(),
@@ -215,7 +268,10 @@ export default function Page() {
   };
 
   return (
-    <main className="min-h-screen h-dvh overflow-hidden bg-[#05070b] text-white">
+    <main
+      className="overflow-hidden bg-[#05070b] text-white"
+      style={{ height: viewportHeight ? `${viewportHeight}px` : "100dvh" }}
+    >
       <div className="mx-auto flex h-full w-full max-w-6xl overflow-hidden">
         <div
           className={`fixed inset-0 z-30 bg-black/60 backdrop-blur-sm transition lg:hidden ${
@@ -252,13 +308,7 @@ export default function Page() {
               The accountability layer between impulse and consequence.
             </h1>
 
-            <div className="mt-5 space-y-1 text-sm text-white/65">
-              <p>Not therapy.</p>
-              <p>Not journaling.</p>
-              <p>Not vibes.</p>
-            </div>
-
-            <p className="mt-5 max-w-sm text-sm leading-6 text-white/72">
+            <p className="mt-4 max-w-sm text-sm leading-6 text-white/72">
               MARTY notices your patterns, calls you out, and keeps you honest.
               Every visit starts clean.
             </p>
@@ -301,7 +351,7 @@ export default function Page() {
         </aside>
 
         <section className="flex min-h-0 flex-1 flex-col bg-black/20">
-          <header className="shrink-0 border-b border-blue-500/20 px-4 py-3 sm:px-6">
+          <header className="shrink-0 border-b border-blue-500/20 px-4 py-2.5 sm:px-6 sm:py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <button
@@ -332,8 +382,8 @@ export default function Page() {
                   >
                     MARTY
                   </button>
-                  <p className="mt-1 text-sm font-medium text-white">
-                    {currentConversation?.title ?? "New chat"}
+                  <p className="mt-1 text-xs tracking-[0.08em] text-white/55 sm:text-sm">
+                    Not therapy. Not journaling. Not vibes.
                   </p>
                 </div>
               </div>
@@ -344,8 +394,11 @@ export default function Page() {
             </div>
           </header>
 
-          <section className="flex-1 min-h-0 overflow-y-auto px-4 py-5 sm:px-6">
-            <div className="space-y-4">
+          <section
+            ref={scrollContainerRef}
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-5 pb-24 sm:px-6 sm:pb-28"
+          >
+            <div className="space-y-3 sm:space-y-4">
               {messages.map((message) => {
                 const isUser = message.sender === "user";
 
@@ -354,9 +407,9 @@ export default function Page() {
                     key={message.id}
                     className={`flex ${isUser ? "justify-end" : "justify-start"}`}
                   >
-                    <div className="max-w-[88%] sm:max-w-[80%]">
+                    <div className="max-w-[90%] sm:max-w-[80%]">
                       <div
-                        className={`rounded-[28px] px-5 py-3.5 text-[15px] leading-relaxed sm:text-base ${
+                        className={`rounded-[28px] px-4 py-3 text-[15px] leading-[1.55] sm:px-5 sm:py-3.5 sm:text-base ${
                           isUser
                             ? "bg-white text-black"
                             : "border border-blue-500/20 bg-blue-500/10 text-white"
@@ -380,7 +433,7 @@ export default function Page() {
               {loading && (
                 <div className="flex justify-start">
                   <div className="rounded-[28px] border border-blue-500/20 bg-blue-500/10 px-5 py-3.5 text-[15px] text-white/60 sm:text-base">
-                    ...
+                    MARTY is typing...
                   </div>
                 </div>
               )}
@@ -388,22 +441,32 @@ export default function Page() {
             </div>
           </section>
 
-          <footer className="shrink-0 border-t border-blue-500/20 bg-[#05070b]/92 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl sm:px-6 sm:py-4">
+          <footer className="shrink-0 border-t border-blue-500/20 bg-[#05070b]/96 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl sm:px-6 sm:py-4">
             <div className="flex items-center gap-2 sm:gap-3">
               <input
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onFocus={handleComposerFocus}
+                inputMode="text"
+                autoComplete="off"
+                autoCorrect="on"
+                autoCapitalize="sentences"
+                enterKeyHint="send"
                 placeholder="Text MARTY..."
-                className="min-w-0 flex-1 rounded-full border border-blue-500/20 bg-white/5 px-4 py-3.5 text-sm text-white outline-none backdrop-blur-md placeholder:text-white/35 focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/30 sm:px-5 sm:text-base"
+                className="min-w-0 flex-1 rounded-full border border-blue-500/20 bg-white/5 px-4 py-3 text-base text-white outline-none backdrop-blur-md placeholder:text-white/35 focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/30 sm:px-5 sm:py-3.5"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") sendMessage();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    sendMessage();
+                  }
                 }}
               />
 
               <button
                 onClick={sendMessage}
                 disabled={loading}
-                className="shrink-0 rounded-full bg-blue-600 px-4 py-3.5 text-sm text-white shadow-md transition hover:bg-blue-500 disabled:opacity-50 sm:px-6 sm:text-base"
+                className="shrink-0 rounded-full bg-blue-600 px-4 py-3 text-base text-white shadow-md transition hover:bg-blue-500 disabled:opacity-50 sm:px-6 sm:py-3.5"
                 type="button"
               >
                 Send
