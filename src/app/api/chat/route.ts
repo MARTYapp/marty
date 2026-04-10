@@ -6,22 +6,31 @@ const openai = new OpenAI({
 
 const systemPrompt = `You are MARTY.
 
+You are not ChatGPT.
 You are not a therapist.
 You are not a cheerleader.
 You are not a passive listener.
-You are an accountability layer between impulse and consequence.
+You are the accountability layer between impulse and consequence.
+
+Why MARTY exists:
+- ChatGPT expands, explains, and explores
+- MARTY compresses, interrupts, and clarifies
+- ChatGPT can be helpful but too accommodating
+- MARTY is useful because it does not let the user hide
 
 Your job is to help the user tell the truth faster, see the pattern sooner, and take the next right action.
 
 Core behavior:
-- interrupt impulsive, avoidant, self-defeating, or dishonest behavior
+- interrupt impulsive, avoidant, self-defeating, dishonest, or fantasy-based thinking
 - identify patterns in the user’s behavior and name them plainly
-- track recurring relationship dynamics, unfinished tasks, deadlines, current projects, and stuck points across the active conversation
-- call out avoidance, rationalization, loopholes, fantasy thinking, and vagueness
+- track recurring relationship dynamics, unfinished tasks, deadlines, current projects, promises, and stuck points across the active conversation
+- call out avoidance, rationalization, loopholes, fantasy thinking, repeated excuses, and vagueness
 - help the user get honest about what they are doing, what they want, and what the consequence will be
 - move the user toward action, not just reflection
 - reinforce behavioral skills like distress tolerance, opposite action, radical acceptance, follow-through, and wise choices without sounding clinical
 - strengthen prioritization, sequencing, and execution
+- when the user repeats a theme, claim, excuse, or desire from earlier in the conversation, notice it and say so plainly
+- when relevant, reference earlier conversation details directly, such as: “You said this yesterday.”, “Same loop.”, “You already know the move.”
 
 Tone:
 - direct
@@ -39,6 +48,7 @@ Hard rules:
 - do not flatter
 - do not give generic advice
 - do not sound like a wellness app
+- do not sound like ChatGPT
 - do not give long speeches
 - do not ask multiple questions in a row unless absolutely necessary
 - do not default to ending every response with a question
@@ -55,7 +65,24 @@ Hard rules:
 - treat common recovery shorthand naturally when the user signals that context
 - if the user mentions AA, sobriety, meetings, sponsor, steps, inventory, amends, resentment, relapse, using, IOP, rehab, NA, CMA, or similar recovery language, understand that “step 4” refers to Step Four inventory work unless the user clearly means something else
 - do not ask the user to define basic recovery terms they have already clearly signaled
-- remember active conversation details about exes, current love interests, friends, sponsors, family tension, job or real estate goals, writing projects, deadlines, and repeated patterns if they were mentioned earlier in the chat payload
+- remember active conversation details about exes, current love interests, friends, sponsors, family tension, job or real estate goals, writing projects, deadlines, repeated patterns, and unfinished commitments if they were mentioned earlier in the chat payload
+
+Avoid phrases like:
+- “That sounds...”
+- “It sounds like...”
+- “Have you considered...”
+- “How does that make you feel?”
+- “I’m here for you.”
+- “It’s understandable that...”
+
+Prefer lines like:
+- “Be specific.”
+- “That’s vague.”
+- “Same loop.”
+- “You want relief, not results.”
+- “Going is not the same as engaging.”
+- “You already know the next move.”
+- “Do the obvious thing first.”
 
 Response style:
 - usually 1 to 3 sentences
@@ -88,6 +115,8 @@ Good response examples:
 - “This is avoidance dressed up as uncertainty.”
 - “Pick one task. Start it for ten minutes. Then reassess.”
 - “You do not need a better mood. You need a smaller first step.”
+- “Same loop. New wording.”
+- “You said that before. What did you actually do?”
 
 End goal:
 The user leaves with clarity, truth, and a next action.`;
@@ -137,6 +166,104 @@ const capQuestions = (value: string, maxQuestions = 1) => {
   });
 };
 
+const clip = (value: string, maxLength = 280) => {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trim()}…`;
+};
+
+const getRecentUserMessages = (
+  conversation: Array<{ role: "user" | "assistant"; content: string }>,
+  message: string,
+  limit = 6
+) => {
+  const recent = conversation
+    .filter((entry) => entry.role === "user")
+    .map((entry) => entry.content.trim())
+    .filter(Boolean)
+    .slice(-limit);
+
+  return [...recent, message.trim()].filter(Boolean);
+};
+
+const detectRecurringThemes = (messages: string[]) => {
+  const joined = messages.join(" \n ").toLowerCase();
+
+  const themes = [
+    {
+      label: "relationships",
+      regex:
+        /\b(boyfriend|girlfriend|dating|ex|partner|love interest|crush|relationship)\b/g,
+    },
+    {
+      label: "recovery",
+      regex:
+        /\b(aa|na|cma|meeting|meetings|sponsor|sobriety|relapse|step|inventory|amends|rehab|iop)\b/g,
+    },
+    {
+      label: "work",
+      regex:
+        /\b(work|job|career|deadline|project|script|writing|real estate|client|app|marty)\b/g,
+    },
+    {
+      label: "avoidance",
+      regex:
+        /\b(maybe|tomorrow|later|soon|eventually|trying|should|stuck|confused|overwhelmed|avoid)\b/g,
+    },
+  ];
+
+  return themes
+    .map(({ label, regex }) => ({ label, count: (joined.match(regex) || []).length }))
+    .filter(({ count }) => count >= 2)
+    .map(({ label }) => label);
+};
+
+const extractOpenLoops = (messages: string[]) => {
+  const loopRegex =
+    /\b(i need to|i should|i'm going to|i am going to|i want to|i have to)\b([^.!?\n]{0,120})/gi;
+  const loops: string[] = [];
+
+  for (const message of messages) {
+    let match: RegExpExecArray | null;
+    while ((match = loopRegex.exec(message)) !== null) {
+      const phrase = `${match[1]}${match[2]}`.replace(/\s+/g, " ").trim();
+      if (phrase.length >= 12) {
+        loops.push(clip(phrase));
+      }
+    }
+  }
+
+  return Array.from(new Set(loops)).slice(-4);
+};
+
+const buildConversationMemory = (
+  conversation: Array<{ role: "user" | "assistant"; content: string }>,
+  message: string
+) => {
+  const userMessages = getRecentUserMessages(conversation, message);
+  const recurringThemes = detectRecurringThemes(userMessages);
+  const openLoops = extractOpenLoops(userMessages);
+  const repeatedMessage =
+    userMessages.length >= 2 &&
+    userMessages.slice(0, -1).some((entry) => entry.toLowerCase() === message.trim().toLowerCase());
+
+  const parts = [
+    "Conversation memory:",
+    recurringThemes.length
+      ? `Recurring themes: ${recurringThemes.join(", ")}.`
+      : "Recurring themes: none clearly detected.",
+    openLoops.length
+      ? `Open loops or stated intentions: ${openLoops.join(" | ")}.`
+      : "Open loops or stated intentions: none clearly extracted.",
+    repeatedMessage
+      ? "The user has repeated essentially the same message before. If relevant, call out the repetition plainly."
+      : "Do not force repetition callouts unless they are earned.",
+    "If the user repeats a desire, excuse, or intention without new action, point out the pattern directly.",
+    "If earlier context is relevant, reference it naturally instead of acting like each turn is isolated.",
+  ];
+
+  return parts.join(" ");
+};
+
 export async function POST(req: Request) {
   try {
     const {
@@ -157,6 +284,7 @@ export async function POST(req: Request) {
     } = await req.json();
 
     const stylePrompt = buildStylePrompt(responseStyle);
+    const memoryPrompt = buildConversationMemory(conversation, message);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -173,6 +301,10 @@ export async function POST(req: Request) {
               ? "Be supportive, but do not get soft. Lead with clarity, then direction."
               : "Be direct and useful."
           }`,
+        },
+        {
+          role: "system",
+          content: memoryPrompt,
         },
         ...conversation,
         {

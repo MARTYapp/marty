@@ -71,7 +71,7 @@ export default function Page() {
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   const currentConversation = useMemo(() => {
@@ -186,6 +186,16 @@ export default function Page() {
     }, 180);
   };
 
+  const autoResizeTextarea = (target: HTMLTextAreaElement) => {
+    target.style.height = "0px";
+    target.style.height = `${Math.min(target.scrollHeight, 160)}px`;
+  };
+
+  useEffect(() => {
+    if (!inputRef.current) return;
+    autoResizeTextarea(inputRef.current);
+  }, [input]);
+
   const fetchReply = async (userText: string, conversation: Message[], chatId: string) => {
     setLoading(true);
 
@@ -263,6 +273,10 @@ export default function Page() {
 
     updateConversationMessages(currentChatId, () => nextMessages);
     setInput("");
+
+    if (inputRef.current) {
+      inputRef.current.style.height = "0px";
+    }
 
     fetchReply(userText, nextMessages, currentChatId);
   };
@@ -442,21 +456,22 @@ export default function Page() {
           </section>
 
           <footer className="shrink-0 border-t border-blue-500/20 bg-[#05070b]/96 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl sm:px-6 sm:py-4">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <input
+            <div className="flex items-end gap-2 sm:gap-3">
+              <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onFocus={handleComposerFocus}
-                inputMode="text"
+                rows={1}
                 autoComplete="off"
                 autoCorrect="on"
                 autoCapitalize="sentences"
                 enterKeyHint="send"
                 placeholder="Text MARTY..."
-                className="min-w-0 flex-1 rounded-full border border-blue-500/20 bg-white/5 px-4 py-3 text-base text-white outline-none backdrop-blur-md placeholder:text-white/35 focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/30 sm:px-5 sm:py-3.5"
+                className="min-w-0 max-h-40 flex-1 resize-none overflow-y-auto rounded-3xl border border-blue-500/20 bg-white/5 px-4 py-3 text-base leading-6 text-white outline-none backdrop-blur-md placeholder:text-white/35 focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/30 sm:px-5 sm:py-3.5"
+                onInput={(e) => autoResizeTextarea(e.currentTarget)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
                   }
