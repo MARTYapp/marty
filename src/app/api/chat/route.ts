@@ -12,11 +12,19 @@ You are not a cheerleader.
 You are not a passive listener.
 You are the accountability layer between impulse and consequence.
 
+
 Why MARTY exists:
 - ChatGPT expands, explains, and explores
 - MARTY compresses, interrupts, and clarifies
 - ChatGPT can be helpful but too accommodating
 - MARTY is useful because it does not let the user hide
+
+Product identity:
+- MARTY is a controlled, intelligent interface for unstable moments
+- MARTY is a bridge before human connection kicks in
+- MARTY is not a friend, not a motivational coach, and not a soothing companion
+- MARTY exists for moments when the user does not fully trust their own thinking
+- MARTY was built from inside the system it is meant to support
 
 Your job is to help the user tell the truth faster, see the pattern sooner, and take the next right action.
 
@@ -153,6 +161,7 @@ const cleanReply = (value: string) => {
     .trim();
 };
 
+
 const capQuestions = (value: string, maxQuestions = 1) => {
   if (maxQuestions < 1) {
     return value.replace(/\?/g, ".");
@@ -166,9 +175,170 @@ const capQuestions = (value: string, maxQuestions = 1) => {
   });
 };
 
+const stripBannedOpeners = (value: string) => {
+  return value
+    .replace(/^it sounds like\s*/i, "")
+    .replace(/^that sounds like\s*/i, "")
+    .replace(/^have you considered\s*/i, "")
+    .replace(/^it’s understandable that\s*/i, "")
+    .replace(/^it's understandable that\s*/i, "")
+    .replace(/^i’m here for you[,.!\s]*/i, "")
+    .replace(/^i'm here for you[,.!\s]*/i, "");
+};
+
+const hardenTone = (value: string) => {
+  let next = value.trim();
+
+  next = stripBannedOpeners(next);
+
+  next = next.replace(/\bI think\b/gi, "");
+  next = next.replace(/\bmaybe\b/gi, "");
+  next = next.replace(/\bperhaps\b/gi, "");
+  next = next.replace(/\s{2,}/g, " ").trim();
+
+  if (next.length > 220 && !next.includes("\n") && next.split(". ").length > 3) {
+    next = next.split(". ").slice(0, 3).join(". ");
+    if (!/[.!?]$/.test(next)) next += ".";
+  }
+
+  return next;
+};
+
+const enforceMartyVoice = (value: string, maxQuestions = 1) => {
+  let next = cleanReply(value);
+  next = hardenTone(next);
+  next = capQuestions(next, maxQuestions);
+
+  if (!next) return "Be specific.";
+
+  return next;
+};
+
+
 const clip = (value: string, maxLength = 280) => {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1).trim()}…`;
+};
+
+const STOP_WORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "but",
+  "if",
+  "then",
+  "than",
+  "that",
+  "this",
+  "those",
+  "these",
+  "you",
+  "your",
+  "yours",
+  "are",
+  "is",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "to",
+  "of",
+  "for",
+  "from",
+  "in",
+  "on",
+  "at",
+  "by",
+  "with",
+  "about",
+  "into",
+  "over",
+  "after",
+  "before",
+  "through",
+  "during",
+  "it",
+  "its",
+  "i",
+  "me",
+  "my",
+  "we",
+  "our",
+  "us",
+  "they",
+  "them",
+  "their",
+  "he",
+  "she",
+  "him",
+  "her",
+  "what",
+  "who",
+  "when",
+  "where",
+  "why",
+  "how",
+  "do",
+  "did",
+  "does",
+  "doing",
+  "done",
+  "have",
+  "has",
+  "had",
+  "can",
+  "could",
+  "should",
+  "would",
+  "will",
+  "just",
+  "really",
+  "very",
+  "still",
+  "same",
+  "more",
+  "most",
+  "much",
+  "kind",
+  "sort",
+  "like",
+  "know",
+  "need",
+  "want",
+  "trying",
+]);
+
+const tokenizeSignalWords = (value: string, minLength = 4) => {
+  return Array.from(
+    new Set(
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(
+          (token) =>
+            token.length >= minLength &&
+            !STOP_WORDS.has(token) &&
+            !/^\d+$/.test(token)
+        )
+    )
+  );
+};
+
+const getSignalOverlap = (source: string, target: string) => {
+  const sourceTokens = tokenizeSignalWords(source);
+  const targetTokens = tokenizeSignalWords(target);
+
+  if (sourceTokens.length === 0 || targetTokens.length === 0) {
+    return [] as string[];
+  }
+
+  const targetSet = new Set(targetTokens);
+  return sourceTokens.filter((token) => targetSet.has(token));
 };
 
 const getRecentUserMessages = (
@@ -183,6 +353,29 @@ const getRecentUserMessages = (
     .slice(-limit);
 
   return [...recent, message.trim()].filter(Boolean);
+};
+
+const getRecentAssistantMessages = (
+  conversation: Array<{ role: "user" | "assistant"; content: string }>,
+  limit = 4
+) => {
+  return conversation
+    .filter((entry) => entry.role === "assistant")
+    .map((entry) => entry.content.trim())
+    .filter(Boolean)
+    .slice(-limit);
+};
+
+const getLastAssistantMessage = (
+  conversation: Array<{ role: "user" | "assistant"; content: string }>
+) => {
+  for (let i = conversation.length - 1; i >= 0; i -= 1) {
+    if (conversation[i]?.role === "assistant") {
+      return conversation[i].content.trim();
+    }
+  }
+
+  return "";
 };
 
 const detectRecurringThemes = (messages: string[]) => {
@@ -235,16 +428,189 @@ const extractOpenLoops = (messages: string[]) => {
   return Array.from(new Set(loops)).slice(-4);
 };
 
+const detectAssistantCallouts = (messages: string[]) => {
+  const joined = messages.join(" \n ").toLowerCase();
+
+  const callouts = [
+    {
+      label: "vagueness",
+      regex: /\b(vague|specific|be specific|not the full story)\b/g,
+    },
+    {
+      label: "loop",
+      regex: /\b(loop|same loop|same pattern|new wording)\b/g,
+    },
+    {
+      label: "avoidance",
+      regex: /\b(avoidance|stalling|uncertainty|relief|results)\b/g,
+    },
+    {
+      label: "action",
+      regex: /\b(next move|do that first|pick one task|start it|action)\b/g,
+    },
+    {
+      label: "engagement",
+      regex: /\b(engaging|connecting|attending)\b/g,
+    },
+  ];
+
+  return callouts
+    .map(({ label, regex }) => ({ label, count: (joined.match(regex) || []).length }))
+    .filter(({ count }) => count >= 1)
+    .map(({ label }) => label);
+};
+
+const detectQuestionLikePrompt = (message: string) => {
+  const lowered = message.toLowerCase();
+
+  return (
+    message.includes("?") ||
+    /\b(be specific|what did you actually do|what changed|do that first|pick one task|who did you talk to|what did you do this week|still vague)\b/i.test(lowered)
+  );
+};
+
+const detectDirectAnswerSignal = (message: string) => {
+  return /\b(i did|i called|i texted|i went|i sent|i finished|i started|i talked to|i reached out|today i|this week i|the move is|i chose|i am doing|i'm doing|i completed|i made|i wrote|i asked|i scheduled|i showed up)\b/i.test(
+    message
+  );
+};
+
+
+const detectSidestepSignal = (message: string) => {
+  return /\b(i know|maybe|tomorrow|later|trying|i want to|i need to|i should|i just|overwhelmed|stuck|confused|but|it’s hard|it's hard)\b/i.test(
+    message
+  );
+};
+
+
+const detectWeakReflectionSignal = (message: string) => {
+  return /\b(i feel|i'm feeling|i am feeling|i guess|i mean|i know|i realize|i understand|part of me|it's hard|it is hard|overwhelmed|confused|stuck)\b/i.test(
+    message
+  );
+};
+
+const classifyTurn = (message: string) => {
+  const trimmed = message.trim();
+
+  if (!trimmed) return "neutral";
+  if (detectDirectAnswerSignal(trimmed)) return "action";
+  if (trimmed.includes("?")) return "question";
+  if (detectSidestepSignal(trimmed) && detectWeakReflectionSignal(trimmed)) {
+    return "dodge";
+  }
+  if (detectSidestepSignal(trimmed)) return "partial";
+  if (/\b(panic|spiral|spiraling|relapse|using|craving|freaking out|losing it|can't stop|can’t stop)\b/i.test(trimmed)) {
+    return "spiral";
+  }
+
+  return "neutral";
+};
+
+const detectUnansweredCallout = (
+  lastAssistantMessage: string,
+  message: string,
+  assistantCallouts: string[]
+) => {
+  if (!lastAssistantMessage) {
+    return {
+      unansweredCalloutDetected: false,
+      lastAssistantExpectedAnswer: false,
+      signalOverlap: [] as string[],
+    };
+  }
+
+  const lastAssistantExpectedAnswer = detectQuestionLikePrompt(lastAssistantMessage);
+  const directAnswerSignal = detectDirectAnswerSignal(message);
+  const sidestepSignal = detectSidestepSignal(message);
+  const weakReflectionSignal = detectWeakReflectionSignal(message);
+  const signalOverlap = getSignalOverlap(lastAssistantMessage, message);
+  const unansweredCalloutDetected =
+    lastAssistantExpectedAnswer &&
+    assistantCallouts.length > 0 &&
+    !directAnswerSignal &&
+    (sidestepSignal || weakReflectionSignal) &&
+    signalOverlap.length < 2;
+
+  return {
+    unansweredCalloutDetected,
+    lastAssistantExpectedAnswer,
+    signalOverlap,
+  };
+};
+
+const detectAssistantAwareLoop = (
+  recentAssistantMessages: string[],
+  lastAssistantMessage: string,
+  recurringThemes: string[],
+  message: string,
+  userMessages: string[]
+) => {
+  if (recentAssistantMessages.length === 0) {
+    return {
+      assistantAwareLoopDetected: false,
+      assistantCallouts: [] as string[],
+      unansweredCalloutDetected: false,
+      lastAssistantExpectedAnswer: false,
+      signalOverlap: [] as string[],
+    };
+  }
+
+  const assistantCallouts = detectAssistantCallouts(recentAssistantMessages);
+  const loweredMessage = message.toLowerCase();
+  const repeatedThemeSignal = recurringThemes.some((theme) => loweredMessage.includes(theme));
+  const likelyStallSignal = /\b(maybe|tomorrow|later|trying|i know|i want|i need to|should)\b/i.test(message);
+  const repeatedUserSignal =
+    userMessages.length >= 2 &&
+    userMessages.slice(0, -1).some((entry) => {
+      const prior = entry.toLowerCase();
+      return prior === loweredMessage || prior.includes(loweredMessage) || loweredMessage.includes(prior);
+    });
+
+  const { unansweredCalloutDetected, lastAssistantExpectedAnswer, signalOverlap } = detectUnansweredCallout(
+    lastAssistantMessage,
+    message,
+    assistantCallouts
+  );
+
+  const assistantAwareLoopDetected =
+    assistantCallouts.length > 0 &&
+    (repeatedThemeSignal || likelyStallSignal || repeatedUserSignal || unansweredCalloutDetected);
+
+  return {
+    assistantAwareLoopDetected,
+    assistantCallouts,
+    unansweredCalloutDetected,
+    lastAssistantExpectedAnswer,
+    signalOverlap,
+  };
+};
+
 const buildConversationMemory = (
   conversation: Array<{ role: "user" | "assistant"; content: string }>,
   message: string
 ) => {
   const userMessages = getRecentUserMessages(conversation, message);
+  const assistantMessages = getRecentAssistantMessages(conversation);
+  const lastAssistantMessage = getLastAssistantMessage(conversation);
   const recurringThemes = detectRecurringThemes(userMessages);
   const openLoops = extractOpenLoops(userMessages);
   const repeatedMessage =
     userMessages.length >= 2 &&
     userMessages.slice(0, -1).some((entry) => entry.toLowerCase() === message.trim().toLowerCase());
+
+  const {
+    assistantAwareLoopDetected,
+    assistantCallouts,
+    unansweredCalloutDetected,
+    lastAssistantExpectedAnswer,
+    signalOverlap,
+  } = detectAssistantAwareLoop(
+    assistantMessages,
+    lastAssistantMessage,
+    recurringThemes,
+    message,
+    userMessages
+  );
 
   const parts = [
     "Conversation memory:",
@@ -257,8 +623,25 @@ const buildConversationMemory = (
     repeatedMessage
       ? "The user has repeated essentially the same message before. If relevant, call out the repetition plainly."
       : "Do not force repetition callouts unless they are earned.",
+    assistantCallouts.length
+      ? `Recent assistant callouts: ${assistantCallouts.join(", ")}.`
+      : "Recent assistant callouts: none clearly detected.",
+    lastAssistantExpectedAnswer
+      ? "The last assistant message appears to have asked for specificity, action, or a direct answer."
+      : "The last assistant message did not clearly demand a direct answer.",
+    signalOverlap.length > 0
+      ? `Signal overlap with last assistant message: ${signalOverlap.join(", ")}.`
+      : "Signal overlap with last assistant message: none clearly detected.",
+    unansweredCalloutDetected
+      ? "Unanswered callout detected: the user appears to have sidestepped MARTY’s last confrontation instead of answering it. Reference that directly."
+      : "Do not accuse the user of sidestepping unless the last exchange supports it.",
+    assistantAwareLoopDetected
+      ? "Assistant-aware loop detected: MARTY already named the pattern and the user appears to be circling back without enough change. Reference that directly and do not reset the conversation."
+      : "Do not claim you already called something out unless the recent assistant messages support it.",
     "If the user repeats a desire, excuse, or intention without new action, point out the pattern directly.",
     "If earlier context is relevant, reference it naturally instead of acting like each turn is isolated.",
+    "When appropriate, treat the current moment as a support-gap moment: the user may be alone, destabilized, or trying to perform insight instead of taking action.",
+    "When the user dodges a direct callout, MARTY can say things like: 'You didn’t answer that.' 'That’s a sidestep.' 'Still the same dodge.' If the user partially answers, MARTY should acknowledge that briefly and then push for the missing piece.",
   ];
 
   return parts.join(" ");
@@ -283,8 +666,21 @@ export async function POST(req: Request) {
       };
     } = await req.json();
 
+    const turnType = classifyTurn(message);
     const stylePrompt = buildStylePrompt(responseStyle);
     const memoryPrompt = buildConversationMemory(conversation, message);
+    const turnTypePrompt =
+      turnType === "dodge"
+        ? "User turn type: dodge. The user is likely sidestepping, stalling, or substituting self-awareness for an answer. Confront directly. Do not soften."
+        : turnType === "partial"
+          ? "User turn type: partial. The user gave something real, but not enough. Acknowledge briefly, then push for the missing piece."
+          : turnType === "action"
+            ? "User turn type: action. The user appears to be naming a concrete action. Acknowledge briefly, then move them to the next right move. Do not overpraise."
+            : turnType === "question"
+              ? "User turn type: question. Answer clearly, but keep MARTY's edge. If the question hides avoidance, name that too."
+              : turnType === "spiral"
+                ? "User turn type: spiral. Narrow the frame immediately. Reduce overwhelm. Keep the reply short, grounded, and action-oriented."
+                : "User turn type: neutral. Stay direct, concise, and behaviorally useful.";
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -306,6 +702,10 @@ export async function POST(req: Request) {
           role: "system",
           content: memoryPrompt,
         },
+        {
+          role: "system",
+          content: turnTypePrompt,
+        },
         ...conversation,
         {
           role: "user",
@@ -315,8 +715,8 @@ export async function POST(req: Request) {
     });
 
     const rawReply = response.choices[0]?.message?.content ?? "Nah. Try again.";
-    const reply = capQuestions(
-      cleanReply(rawReply),
+    const reply = enforceMartyVoice(
+      rawReply,
       responseStyle?.maxQuestions ?? 1
     );
 
@@ -324,7 +724,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("API route error:", error);
     return Response.json(
-      { reply: "Something broke. Try again in a second." },
+      { reply: "Seems like we got disconnected. Try again in a sec." },
       { status: 500 }
     );
   }
