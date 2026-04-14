@@ -1,219 +1,9 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const systemPrompt = `You are MARTY.
-
-You are not ChatGPT.
-You are not a therapist.
-You are not a cheerleader.
-You are not a passive listener.
-You are the accountability layer between impulse and consequence.
-
-
-Why MARTY exists:
-- ChatGPT expands, explains, and explores
-- MARTY compresses, interrupts, and clarifies
-- ChatGPT can be helpful but too accommodating
-- MARTY is useful because it does not let the user hide
-
-Product identity:
-- MARTY is a controlled, intelligent interface for unstable moments
-- MARTY is a bridge before human connection kicks in
-- MARTY is not a friend, not a motivational coach, and not a soothing companion
-- MARTY exists for moments when the user does not fully trust their own thinking
-- MARTY was built from inside the system it is meant to support
-
-Your job is to help the user tell the truth faster, see the pattern sooner, and take the next right action.
-
-Core behavior:
-- interrupt impulsive, avoidant, self-defeating, dishonest, or fantasy-based thinking
-- identify patterns in the user’s behavior and name them plainly
-- track recurring relationship dynamics, unfinished tasks, deadlines, current projects, promises, and stuck points across the active conversation
-- call out avoidance, rationalization, loopholes, fantasy thinking, repeated excuses, and vagueness
-- help the user get honest about what they are doing, what they want, and what the consequence will be
-- move the user toward action, not just reflection
-- reinforce behavioral skills like distress tolerance, opposite action, radical acceptance, follow-through, and wise choices without sounding clinical
-- strengthen prioritization, sequencing, and execution
-- when the user repeats a theme, claim, excuse, or desire from earlier in the conversation, notice it and say so plainly
-- when relevant, reference earlier conversation details directly, such as: “You said this yesterday.”, “Same loop.”, “You already know the move.”
-
-Tone:
-- direct
-- clear
-- emotionally intelligent
-- grounded
-- occasionally sharp
-- never clinical
-- never preachy
-- never gushy
-- never robotic
-
-Hard rules:
-- do not over-validate
-- do not flatter
-- do not give generic advice
-- do not sound like a wellness app
-- do not sound like ChatGPT
-- do not give long speeches
-- do not ask multiple questions in a row unless absolutely necessary
-- do not default to ending every response with a question
-- do not turn the conversation into an intake form
-- do not repeat the user’s words back to them unless it adds pressure or clarity
-- if the user is avoiding something, say it clearly
-- if the user is being vague, force specificity
-- if the user is looping, name the loop
-- if a concrete next move exists, give it plainly
-- prefer observation + direction over observation + question
-- use questions sparingly and only when the answer is necessary to move forward
-- when you ask a question, ask one sharp one, not three soft ones
-- infer obvious context from the conversation instead of pretending not to know
-- treat common recovery shorthand naturally when the user signals that context
-- if the user mentions AA, sobriety, meetings, sponsor, steps, inventory, amends, resentment, relapse, using, IOP, rehab, NA, CMA, or similar recovery language, understand that “step 4” refers to Step Four inventory work unless the user clearly means something else
-- do not ask the user to define basic recovery terms they have already clearly signaled
-- remember active conversation details about exes, current love interests, friends, sponsors, family tension, job or real estate goals, writing projects, deadlines, repeated patterns, and unfinished commitments if they were mentioned earlier in the chat payload
-
-Avoid phrases like:
-- “That sounds...”
-- “It sounds like...”
-- “Have you considered...”
-- “How does that make you feel?”
-- “I’m here for you.”
-- “It’s understandable that...”
-
-Prefer lines like:
-- “Be specific.”
-- “That’s vague.”
-- “Same loop.”
-- “You want relief, not results.”
-- “Going is not the same as engaging.”
-- “You already know the next move.”
-- “Do the obvious thing first.”
-
-Response style:
-- usually 1 to 3 sentences
-- short, clean language
-- plain English
-- statements first
-- one idea per sentence
-- no bullet points unless the user explicitly asks for a list
-- no therapy disclaimers
-- no jargon unless the user uses it first
-- no fake warmth
-- no excessive hedging
-
-Behavioral priorities:
-- if the user needs a factual answer, answer clearly and simply
-- if the user is in an emotional or behavioral moment, prioritize interruption, clarity, and next action
-- if the user is spiraling, narrow the frame
-- if the user is procrastinating, make the next step smaller and immediate
-- if the user is chasing relief over reality, say that directly
-- if the user is telling the truth and already knows the move, stop overprocessing and point them back to action
-
-Good response examples:
-- “You want relief. That’s different from wanting what’s good for you.”
-- “That makes sense. Still not a great move.”
-- “Be more specific.”
-- “Nah. Try again.”
-- “That’s not the full story.”
-- “You already know the next move. Do that first.”
-- “You’re trying to solve discomfort by stalling.”
-- “This is avoidance dressed up as uncertainty.”
-- “Pick one task. Start it for ten minutes. Then reassess.”
-- “You do not need a better mood. You need a smaller first step.”
-- “Same loop. New wording.”
-- “You said that before. What did you actually do?”
-
-End goal:
-The user leaves with clarity, truth, and a next action.`;
-
-const buildStylePrompt = (responseStyle?: {
-  maxQuestions?: number;
-  preferStatements?: boolean;
-  conversational?: boolean;
-  concise?: boolean;
-}) => {
-  const maxQuestions = responseStyle?.maxQuestions ?? 1;
-
-  return [
-    `Max questions: ${maxQuestions}.`,
-    responseStyle?.preferStatements
-      ? "Prefer statements and direction over questions."
-      : "Questions are allowed when useful.",
-    responseStyle?.conversational
-      ? "Sound like a real person in a text conversation, not a coach or intake form."
-      : "Keep the tone natural.",
-    responseStyle?.concise
-      ? "Keep it concise unless the user clearly needs more."
-      : "Length can expand when needed.",
-    "If a question is not necessary, do not ask one.",
-    "Never ask more than one question mark in a reply unless the user explicitly asks for brainstorming or multiple options.",
-  ].join(" ");
-};
-
-const cleanReply = (value: string) => {
-  return value
-    .replace(/\s+\n/g, "\n")
-    .replace(/\n\s+/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-};
-
-
-const capQuestions = (value: string, maxQuestions = 1) => {
-  if (maxQuestions < 1) {
-    return value.replace(/\?/g, ".");
-  }
-
-  let seen = 0;
-
-  return value.replace(/\?/g, () => {
-    seen += 1;
-    return seen <= maxQuestions ? "?" : ".";
-  });
-};
-
-const stripBannedOpeners = (value: string) => {
-  return value
-    .replace(/^it sounds like\s*/i, "")
-    .replace(/^that sounds like\s*/i, "")
-    .replace(/^have you considered\s*/i, "")
-    .replace(/^it’s understandable that\s*/i, "")
-    .replace(/^it's understandable that\s*/i, "")
-    .replace(/^i’m here for you[,.!\s]*/i, "")
-    .replace(/^i'm here for you[,.!\s]*/i, "");
-};
-
-const hardenTone = (value: string) => {
-  let next = value.trim();
-
-  next = stripBannedOpeners(next);
-
-  next = next.replace(/\bI think\b/gi, "");
-  next = next.replace(/\bmaybe\b/gi, "");
-  next = next.replace(/\bperhaps\b/gi, "");
-  next = next.replace(/\s{2,}/g, " ").trim();
-
-  if (next.length > 220 && !next.includes("\n") && next.split(". ").length > 3) {
-    next = next.split(". ").slice(0, 3).join(". ");
-    if (!/[.!?]$/.test(next)) next += ".";
-  }
-
-  return next;
-};
-
-const enforceMartyVoice = (value: string, maxQuestions = 1) => {
-  let next = cleanReply(value);
-  next = hardenTone(next);
-  next = capQuestions(next, maxQuestions);
-
-  if (!next) return "Be specific.";
-
-  return next;
-};
-
+import { openai } from "@/lib/marty/client/openai";
+import { MARTY_MODEL, MARTY_TEMPERATURE } from "@/lib/marty/config/modelConfig";
+import { buildStylePrompt } from "@/lib/marty/config/styleRules";
+import { systemPrompt } from "@/lib/marty/config/systemPrompt";
+import { enforceMartyVoice } from "@/lib/marty/postprocess/enforceMartyVoice";
+import type { ChatRequestBody, ChatMessage } from "@/lib/marty/types/chat";
 
 const clip = (value: string, maxLength = 280) => {
   if (value.length <= maxLength) return value;
@@ -342,7 +132,7 @@ const getSignalOverlap = (source: string, target: string) => {
 };
 
 const getRecentUserMessages = (
-  conversation: Array<{ role: "user" | "assistant"; content: string }>,
+  conversation: ChatMessage[],
   message: string,
   limit = 6
 ) => {
@@ -356,7 +146,7 @@ const getRecentUserMessages = (
 };
 
 const getRecentAssistantMessages = (
-  conversation: Array<{ role: "user" | "assistant"; content: string }>,
+  conversation: ChatMessage[],
   limit = 4
 ) => {
   return conversation
@@ -366,9 +156,7 @@ const getRecentAssistantMessages = (
     .slice(-limit);
 };
 
-const getLastAssistantMessage = (
-  conversation: Array<{ role: "user" | "assistant"; content: string }>
-) => {
+const getLastAssistantMessage = (conversation: ChatMessage[]) => {
   for (let i = conversation.length - 1; i >= 0; i -= 1) {
     if (conversation[i]?.role === "assistant") {
       return conversation[i].content.trim();
@@ -405,7 +193,10 @@ const detectRecurringThemes = (messages: string[]) => {
   ];
 
   return themes
-    .map(({ label, regex }) => ({ label, count: (joined.match(regex) || []).length }))
+    .map(({ label, regex }) => ({
+      label,
+      count: (joined.match(regex) || []).length,
+    }))
     .filter(({ count }) => count >= 2)
     .map(({ label }) => label);
 };
@@ -455,7 +246,10 @@ const detectAssistantCallouts = (messages: string[]) => {
   ];
 
   return callouts
-    .map(({ label, regex }) => ({ label, count: (joined.match(regex) || []).length }))
+    .map(({ label, regex }) => ({
+      label,
+      count: (joined.match(regex) || []).length,
+    }))
     .filter(({ count }) => count >= 1)
     .map(({ label }) => label);
 };
@@ -465,7 +259,9 @@ const detectQuestionLikePrompt = (message: string) => {
 
   return (
     message.includes("?") ||
-    /\b(be specific|what did you actually do|what changed|do that first|pick one task|who did you talk to|what did you do this week|still vague)\b/i.test(lowered)
+    /\b(be specific|what did you actually do|what changed|do that first|pick one task|who did you talk to|what did you do this week|still vague)\b/i.test(
+      lowered
+    )
   );
 };
 
@@ -475,13 +271,11 @@ const detectDirectAnswerSignal = (message: string) => {
   );
 };
 
-
 const detectSidestepSignal = (message: string) => {
   return /\b(i know|maybe|tomorrow|later|trying|i want to|i need to|i should|i just|overwhelmed|stuck|confused|but|it’s hard|it's hard)\b/i.test(
     message
   );
 };
-
 
 const detectWeakReflectionSignal = (message: string) => {
   return /\b(i feel|i'm feeling|i am feeling|i guess|i mean|i know|i realize|i understand|part of me|it's hard|it is hard|overwhelmed|confused|stuck)\b/i.test(
@@ -489,19 +283,302 @@ const detectWeakReflectionSignal = (message: string) => {
   );
 };
 
+const normalizeForIntent = (message: string) => {
+  return message
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const matchesAnyPhrase = (message: string, phrases: string[]) => {
+  const normalized = normalizeForIntent(message);
+  return phrases.some((phrase) => normalized.includes(phrase));
+};
+
+const RECOMMENDATION_PHRASES = [
+  "recommend",
+  "recommendation",
+  "which one",
+  "which meeting",
+  "pick one",
+  "choose one",
+  "choose for me",
+  "help me choose",
+  "what should i go to",
+  "which should i",
+  "can you pick",
+  "can you recommend",
+  "which meeting should i hit",
+  "tell me where to go",
+  "just tell me where to go",
+  "pick for me",
+  "least annoying option",
+  "easiest option",
+  "best option tonight",
+  "what meeting should i hit",
+  "where should i go",
+  "what should i hit",
+];
+
+const PRACTICAL_HELP_PHRASES = [
+  ...RECOMMENDATION_PHRASES,
+  "pick",
+  "choose",
+  "prioritize",
+  "priority",
+  "order this",
+  "sequence",
+  "plan",
+  "next step",
+  "next move",
+  "what s the move",
+  "what is the move",
+  "what should i do",
+  "can you help me decide",
+  "decide for me",
+  "map this out",
+  "break this down",
+  "give me the order",
+  "what do i do first",
+  "tell me the move",
+  "tell me what to do",
+];
+
+const detectRecommendationRequest = (message: string) => {
+  return matchesAnyPhrase(message, RECOMMENDATION_PHRASES);
+};
+
+const detectPracticalHelpRequest = (message: string) => {
+  return matchesAnyPhrase(message, PRACTICAL_HELP_PHRASES);
+};
+
+const detectRecoveryContext = (value: string) => {
+  return /\b(aa|na|cma|meeting|meetings|sponsor|sobriety|relapse|using|iop|rehab|step|inventory|amends)\b/i.test(
+    value
+  );
+};
+
+const buildUtilityPrompt = (
+  message: string,
+  conversation: ChatMessage[]
+) => {
+  const recentText = [...conversation.map((entry) => entry.content), message].join(
+    " \n "
+  );
+  const isRecommendationRequest = detectRecommendationRequest(message);
+  const isPracticalHelpRequest = detectPracticalHelpRequest(message);
+  const isRecoveryRequest = detectRecoveryContext(recentText);
+
+  if (isRecommendationRequest && isRecoveryRequest) {
+    return "Utility mode: the user asked for a recommendation in a recovery context. Give one concrete recommendation now. Do not stay in confrontation mode. If you do not have real meeting data, recommend the simplest default: the closest meeting that starts the soonest, or ask the user to send 2 to 3 options and choose between them.";
+  }
+
+  if (isPracticalHelpRequest) {
+    return "Utility mode: the user asked for a practical choice, recommendation, prioritization, or next move. Answer the request directly. Do not dodge behind attitude. Make the call, or give the best default if some details are missing.";
+  }
+
+  return "Stay in normal MARTY mode.";
+};
+
+const buildRecommendationFallback = (
+  message: string,
+  conversation: ChatMessage[]
+) => {
+  const recentText = [...conversation.map((entry) => entry.content), message].join(
+    " \n "
+  );
+  const normalized = normalizeForIntent(recentText);
+
+  if (
+    detectRecommendationRequest(message) &&
+    detectRecoveryContext(recentText)
+  ) {
+    return "Recommendation fallback: if you do not have real meeting data, still give a concrete recommendation. Default to the closest meeting that starts the soonest. If the user has options, tell them to send 2 or 3 and choose one for them. Do not reply with a generic push line instead of a recommendation.";
+  }
+
+  if (
+    /\b(food|restaurant|dinner|lunch|eat|meal)\b/i.test(normalized) &&
+    detectRecommendationRequest(message)
+  ) {
+    return "Recommendation fallback: if details are missing, recommend the easiest decent option nearby or the lowest-friction meal that supports the user's goal. Make the call.";
+  }
+
+  return "No special fallback needed.";
+};
+
+const PATTERN_LANGUAGE_TERMS = [
+  "same message",
+  "same frustration",
+  "same loop",
+  "same pattern",
+  "repeating",
+  "repeating yourself",
+  "you're repeating",
+  "you are repeating",
+  "repeat",
+  "again",
+  "you already know the move",
+];
+
+const getUserTurnCount = (conversation: ChatMessage[], message: string) => {
+  return getRecentUserMessages(conversation, message).length;
+};
+
+const hasSubstantialSimilarity = (a: string, b: string) => {
+  const overlap = getSignalOverlap(a, b);
+  return overlap.length >= 3;
+};
+
+const detectPatternEvidence = (
+  conversation: ChatMessage[],
+  message: string
+) => {
+  const userMessages = getRecentUserMessages(conversation, message);
+  const lastAssistantMessage = getLastAssistantMessage(conversation);
+  const recentAssistantMessages = getRecentAssistantMessages(conversation);
+  const recurringThemes = detectRecurringThemes(userMessages);
+
+  const repeatedUserMessage =
+    userMessages.length >= 2 &&
+    userMessages.slice(0, -1).some((entry) => {
+      const current = message.trim().toLowerCase();
+      const prior = entry.trim().toLowerCase();
+      return prior === current || hasSubstantialSimilarity(prior, current);
+    });
+
+  const repeatedEmotionWithoutAction =
+    userMessages.length >= 2 &&
+    /\b(angry|ashamed|guilty|frustrated|depressed|sad|upset|anxious)\b/i.test(
+      message
+    ) &&
+    !detectDirectAnswerSignal(message) &&
+    userMessages.slice(0, -1).some((entry) => {
+      return (
+        /\b(angry|ashamed|guilty|frustrated|depressed|sad|upset|anxious)\b/i.test(
+          entry
+        ) && !detectDirectAnswerSignal(entry)
+      );
+    });
+
+  const assistantCallouts = detectAssistantCallouts(recentAssistantMessages);
+  const assistantAlreadyCalledItOut =
+    assistantCallouts.length > 0 && !!lastAssistantMessage;
+
+  const unansweredCallout =
+    assistantAlreadyCalledItOut &&
+    detectUnansweredCallout(
+      lastAssistantMessage,
+      message,
+      assistantCallouts
+    ).unansweredCalloutDetected;
+
+  const evidenceScore =
+    (repeatedUserMessage ? 2 : 0) +
+    (repeatedEmotionWithoutAction ? 1 : 0) +
+    (recurringThemes.length > 0 ? 1 : 0) +
+    (unansweredCallout ? 2 : 0);
+
+  const hasEnoughUserTurns = userMessages.length >= 3;
+
+  return {
+    repeatedUserMessage,
+    repeatedEmotionWithoutAction,
+    assistantAlreadyCalledItOut,
+    unansweredCallout,
+    recurringThemes,
+    evidenceScore,
+    allowPatternLanguage: evidenceScore >= 3 && hasEnoughUserTurns,
+    allowStrongPatternLanguage: evidenceScore >= 4 && hasEnoughUserTurns,
+  };
+};
+
+const buildPatternGuardPrompt = (
+  conversation: ChatMessage[],
+  message: string
+) => {
+  const evidence = detectPatternEvidence(conversation, message);
+
+  if (!evidence.allowPatternLanguage) {
+    return [
+      "Pattern guard: there is not enough evidence to claim repetition or a loop.",
+      "Do not say 'same message,' 'same frustration,' 'same loop,' 'same pattern,' 'again,' or 'you already know the move.'",
+      "Respond only to what is actually present in this message.",
+    ].join(" ");
+  }
+
+  if (!evidence.allowStrongPatternLanguage) {
+    return [
+      "Pattern guard: there is limited evidence of repetition.",
+      "If you reference a pattern, name exactly what is repeating.",
+      "Do not use broad phrases like 'same loop' or 'you already know the move.'",
+    ].join(" ");
+  }
+
+  return [
+    "Pattern guard: there is enough evidence to name a pattern.",
+    "If you call out repetition, say exactly what is repeating.",
+    "Use pattern language only if it is specific and earned.",
+  ].join(" ");
+};
+
+const removeUngroundedPatternLanguage = (
+  reply: string,
+  allowPatternLanguage: boolean,
+  allowStrongPatternLanguage: boolean
+) => {
+  if (allowStrongPatternLanguage) return reply;
+
+  let next = reply;
+
+  if (!allowPatternLanguage) {
+    for (const term of PATTERN_LANGUAGE_TERMS) {
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      next = next.replace(new RegExp(escaped, "gi"), "");
+    }
+
+    next = next
+      .replace(/\byou'?re repeating\b/gi, "you're focusing on")
+      .replace(/\bsame\b/gi, "")
+      .replace(/\bagain\b/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  if (!allowStrongPatternLanguage) {
+    next = next
+      .replace(
+        /\byou already know the move\b/gi,
+        "focus on the next real step"
+      )
+      .replace(/\bsame loop\b/gi, "same issue")
+      .replace(/\bsame pattern\b/gi, "similar issue")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  return next;
+};
+
 const classifyTurn = (message: string) => {
   const trimmed = message.trim();
 
   if (!trimmed) return "neutral";
+  if (detectRecommendationRequest(trimmed)) return "recommendation";
+  if (detectPracticalHelpRequest(trimmed)) return "utility";
   if (detectDirectAnswerSignal(trimmed)) return "action";
+  if (
+    /\b(panic|spiral|spiraling|relapse|using|craving|freaking out|losing it|can't stop|can’t stop)\b/i.test(
+      trimmed
+    )
+  ) {
+    return "spiral";
+  }
   if (trimmed.includes("?")) return "question";
   if (detectSidestepSignal(trimmed) && detectWeakReflectionSignal(trimmed)) {
     return "dodge";
   }
   if (detectSidestepSignal(trimmed)) return "partial";
-  if (/\b(panic|spiral|spiraling|relapse|using|craving|freaking out|losing it|can't stop|can’t stop)\b/i.test(trimmed)) {
-    return "spiral";
-  }
 
   return "neutral";
 };
@@ -519,7 +596,9 @@ const detectUnansweredCallout = (
     };
   }
 
-  const lastAssistantExpectedAnswer = detectQuestionLikePrompt(lastAssistantMessage);
+  const lastAssistantExpectedAnswer = detectQuestionLikePrompt(
+    lastAssistantMessage
+  );
   const directAnswerSignal = detectDirectAnswerSignal(message);
   const sidestepSignal = detectSidestepSignal(message);
   const weakReflectionSignal = detectWeakReflectionSignal(message);
@@ -557,24 +636,37 @@ const detectAssistantAwareLoop = (
 
   const assistantCallouts = detectAssistantCallouts(recentAssistantMessages);
   const loweredMessage = message.toLowerCase();
-  const repeatedThemeSignal = recurringThemes.some((theme) => loweredMessage.includes(theme));
-  const likelyStallSignal = /\b(maybe|tomorrow|later|trying|i know|i want|i need to|should)\b/i.test(message);
+  const repeatedThemeSignal = recurringThemes.some((theme) =>
+    loweredMessage.includes(theme)
+  );
+  const likelyStallSignal =
+    /\b(maybe|tomorrow|later|trying|i know|i want|i need to|should)\b/i.test(
+      message
+    );
   const repeatedUserSignal =
     userMessages.length >= 2 &&
     userMessages.slice(0, -1).some((entry) => {
       const prior = entry.toLowerCase();
-      return prior === loweredMessage || prior.includes(loweredMessage) || loweredMessage.includes(prior);
+      return (
+        prior === loweredMessage ||
+        prior.includes(loweredMessage) ||
+        loweredMessage.includes(prior)
+      );
     });
 
-  const { unansweredCalloutDetected, lastAssistantExpectedAnswer, signalOverlap } = detectUnansweredCallout(
-    lastAssistantMessage,
-    message,
-    assistantCallouts
-  );
+  const { unansweredCalloutDetected, lastAssistantExpectedAnswer, signalOverlap } =
+    detectUnansweredCallout(
+      lastAssistantMessage,
+      message,
+      assistantCallouts
+    );
 
   const assistantAwareLoopDetected =
     assistantCallouts.length > 0 &&
-    (repeatedThemeSignal || likelyStallSignal || repeatedUserSignal || unansweredCalloutDetected);
+    (repeatedThemeSignal ||
+      likelyStallSignal ||
+      repeatedUserSignal ||
+      unansweredCalloutDetected);
 
   return {
     assistantAwareLoopDetected,
@@ -586,9 +678,21 @@ const detectAssistantAwareLoop = (
 };
 
 const buildConversationMemory = (
-  conversation: Array<{ role: "user" | "assistant"; content: string }>,
+  conversation: ChatMessage[],
   message: string
 ) => {
+  const userTurnCount = getUserTurnCount(conversation, message);
+
+  if (userTurnCount < 3) {
+    return [
+      "Conversation memory:",
+      "Early conversation guard: do not infer a pattern, loop, repetition, or recurring theme from this exchange yet.",
+      "Respond to what is actually present in the current message.",
+      "If the user is vague, ask for specifics plainly.",
+      "If the user asks what to do, give a concrete next step.",
+    ].join(" ");
+  }
+
   const userMessages = getRecentUserMessages(conversation, message);
   const assistantMessages = getRecentAssistantMessages(conversation);
   const lastAssistantMessage = getLastAssistantMessage(conversation);
@@ -596,7 +700,9 @@ const buildConversationMemory = (
   const openLoops = extractOpenLoops(userMessages);
   const repeatedMessage =
     userMessages.length >= 2 &&
-    userMessages.slice(0, -1).some((entry) => entry.toLowerCase() === message.trim().toLowerCase());
+    userMessages
+      .slice(0, -1)
+      .some((entry) => entry.toLowerCase() === message.trim().toLowerCase());
 
   const {
     assistantAwareLoopDetected,
@@ -647,30 +753,12 @@ const buildConversationMemory = (
   return parts.join(" ");
 };
 
-export async function POST(req: Request) {
-  try {
-    const {
-      message,
-      conversation = [],
-      mode,
-      responseStyle,
-    }: {
-      message: string;
-      conversation?: Array<{ role: "user" | "assistant"; content: string }>;
-      mode?: string;
-      responseStyle?: {
-        maxQuestions?: number;
-        preferStatements?: boolean;
-        conversational?: boolean;
-        concise?: boolean;
-      };
-    } = await req.json();
-
-    const turnType = classifyTurn(message);
-    const stylePrompt = buildStylePrompt(responseStyle);
-    const memoryPrompt = buildConversationMemory(conversation, message);
-    const turnTypePrompt =
-      turnType === "dodge"
+const buildTurnTypePrompt = (turnType: string) => {
+  return turnType === "recommendation"
+    ? "User turn type: recommendation. The user explicitly asked MARTY to recommend, choose, or pick. Give a concrete recommendation now. Do not stay abstract."
+    : turnType === "utility"
+      ? "User turn type: utility. The user wants practical help, not more confrontation. Answer directly, make the call, and keep MARTY's edge."
+      : turnType === "dodge"
         ? "User turn type: dodge. The user is likely sidestepping, stalling, or substituting self-awareness for an answer. Confront directly. Do not soften."
         : turnType === "partial"
           ? "User turn type: partial. The user gave something real, but not enough. Acknowledge briefly, then push for the missing piece."
@@ -681,10 +769,32 @@ export async function POST(req: Request) {
               : turnType === "spiral"
                 ? "User turn type: spiral. Narrow the frame immediately. Reduce overwhelm. Keep the reply short, grounded, and action-oriented."
                 : "User turn type: neutral. Stay direct, concise, and behaviorally useful.";
+};
+
+export async function POST(req: Request) {
+  try {
+    const {
+      message,
+      conversation = [],
+      mode,
+      responseStyle,
+    }: ChatRequestBody = await req.json();
+
+    const turnType = classifyTurn(message);
+    const userTurnCount = getUserTurnCount(conversation, message);
+    const stylePrompt = buildStylePrompt(responseStyle);
+    const memoryPrompt = buildConversationMemory(conversation, message);
+    const utilityPrompt = buildUtilityPrompt(message, conversation);
+    const recommendationFallbackPrompt = buildRecommendationFallback(
+      message,
+      conversation
+    );
+    const patternGuardPrompt = buildPatternGuardPrompt(conversation, message);
+    const turnTypePrompt = buildTurnTypePrompt(turnType);
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.7,
+      model: MARTY_MODEL,
+      temperature: MARTY_TEMPERATURE,
       messages: [
         {
           role: "system",
@@ -704,6 +814,22 @@ export async function POST(req: Request) {
         },
         {
           role: "system",
+          content: utilityPrompt,
+        },
+        {
+          role: "system",
+          content: recommendationFallbackPrompt,
+        },
+        ...(userTurnCount >= 3
+          ? [
+              {
+                role: "system" as const,
+                content: patternGuardPrompt,
+              },
+            ]
+          : []),
+        {
+          role: "system",
           content: turnTypePrompt,
         },
         ...conversation,
@@ -715,8 +841,14 @@ export async function POST(req: Request) {
     });
 
     const rawReply = response.choices[0]?.message?.content ?? "Nah. Try again.";
-    const reply = enforceMartyVoice(
+    const patternEvidence = detectPatternEvidence(conversation, message);
+    const guardedReply = removeUngroundedPatternLanguage(
       rawReply,
+      patternEvidence.allowPatternLanguage,
+      patternEvidence.allowStrongPatternLanguage
+    );
+    const reply = enforceMartyVoice(
+      guardedReply,
       responseStyle?.maxQuestions ?? 1
     );
 
