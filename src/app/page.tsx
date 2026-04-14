@@ -67,7 +67,6 @@ export default function Page() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
@@ -87,40 +86,11 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const saved = window.localStorage.getItem("marty_conversations");
-    let parsed: Conversation[] = [];
-
-    if (saved) {
-      try {
-        parsed = JSON.parse(saved) as Conversation[];
-      } catch {
-        parsed = [];
-      }
-    }
-
-    if (parsed.length > 0) {
-      const sorted = [...parsed].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
-      setConversations(sorted);
-      setCurrentChatId(sorted[0].id);
-    } else {
-      const freshConversation = createConversation();
-      setConversations([freshConversation]);
-      setCurrentChatId(freshConversation.id);
-    }
-
-    setHydrated(true);
+    const freshConversation = createConversation();
+    setConversations([freshConversation]);
+    setCurrentChatId(freshConversation.id);
   }, []);
 
-  useEffect(() => {
-    if (!hydrated || typeof window === "undefined") return;
-
-    window.localStorage.setItem(
-      "marty_conversations",
-      JSON.stringify(conversations)
-    );
-  }, [conversations, hydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
