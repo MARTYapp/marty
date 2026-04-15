@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 type Message = {
   id: number;
@@ -20,6 +27,18 @@ type Conversation = {
   createdAt: number;
   updatedAt: number;
   messages: Message[];
+};
+
+type PanelKey =
+  | "what-this-is"
+  | "how-to-use-this"
+  | "privacy"
+  | "give-feedback";
+
+type MenuItem = {
+  label: string;
+  description: string;
+  content: ReactNode;
 };
 
 const formatTime = () =>
@@ -61,20 +80,99 @@ const normalizeReplyText = (value: string) => {
   return value.replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
 };
 
+const menuItems: Record<PanelKey, MenuItem> = {
+  "what-this-is": {
+    label: "What this is",
+    description: "Direct accountability, not comfort theater.",
+    content: (
+      <>
+        <p>
+          MARTY is the accountability layer between impulse and consequence.
+        </p>
+        <p>
+          It is built to cut through spirals, shrink overwhelm, and push you
+          toward one honest next move.
+        </p>
+        <p>Not therapy. Not journaling. Not vibes. Direction.</p>
+      </>
+    ),
+  },
+  "how-to-use-this": {
+    label: "How to use this",
+    description: "Bring the truth. Keep it specific.",
+    content: (
+      <>
+        <p>Best inputs are blunt, real, and current.</p>
+        <p>
+          Say what is happening, what you want to avoid, or what you are about
+          to do.
+        </p>
+        <p>
+          Examples: “I want to text him.” “I’m about to go into Whole Foods.”
+          “My apartment is a mess and I’m frozen.”
+        </p>
+        <p>
+          MARTY works best when it can name the pattern and give you one move,
+          not ten.
+        </p>
+      </>
+    ),
+  },
+  privacy: {
+    label: "Privacy",
+    description: "Clarity about what belongs here.",
+    content: (
+      <>
+        <p>
+          Treat MARTY like a serious product, not a diary you dump your whole
+          life into.
+        </p>
+        <p>
+          Share what is needed for the moment. Skip anything you would not want
+          floating around in a product you are still shaping.
+        </p>
+        <p>Keep it useful. Keep it intentional.</p>
+      </>
+    ),
+  },
+  "give-feedback": {
+    label: "Give feedback",
+    description: "Shape the voice while it is still being built.",
+    content: (
+      <>
+        <p>
+          Pay attention to what hits, what misses, and where MARTY gets too
+          soft, too vague, or too wordy.
+        </p>
+        <p>
+          The best feedback is specific: paste the reply, say what felt off, and
+          say what it should have done instead.
+        </p>
+        <p>That is how this gets sharp.</p>
+      </>
+    ),
+  },
+};
+
 export default function Page() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   const currentConversation = useMemo(() => {
-    return conversations.find((conversation) => conversation.id === currentChatId);
+    return conversations.find(
+      (conversation) => conversation.id === currentChatId
+    );
   }, [conversations, currentChatId]);
 
   const messages = currentConversation?.messages || [];
@@ -90,7 +188,6 @@ export default function Page() {
     setConversations([freshConversation]);
     setCurrentChatId(freshConversation.id);
   }, []);
-
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -148,6 +245,17 @@ export default function Page() {
     setInput("");
     setLoading(false);
     setSidebarOpen(false);
+    setMenuOpen(false);
+    setActivePanel(null);
+  };
+
+  const openPanel = (panel: PanelKey) => {
+    setActivePanel(panel);
+    setMenuOpen(false);
+  };
+
+  const closePanel = () => {
+    setActivePanel(null);
   };
 
   const handleComposerFocus = () => {
@@ -166,7 +274,34 @@ export default function Page() {
     autoResizeTextarea(inputRef.current);
   }, [input]);
 
-  const fetchReply = async (userText: string, conversation: Message[], chatId: string) => {
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current) return;
+      if (menuRef.current.contains(event.target as Node)) return;
+
+      setMenuOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      setActivePanel(null);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const fetchReply = async (
+    userText: string,
+    conversation: Message[],
+    chatId: string
+  ) => {
     setLoading(true);
 
     try {
@@ -271,21 +406,9 @@ export default function Page() {
         >
           <div className="border-b border-blue-500/20 px-5 pb-5 pt-6">
             <div className="flex items-center justify-between gap-3">
-              <button
-                onClick={startNewChat}
-                className="text-left text-sm font-semibold uppercase tracking-[0.35em] text-blue-400 transition hover:text-blue-300"
-                type="button"
-              >
+              <span className="text-left text-sm font-semibold uppercase tracking-[0.35em] text-blue-400">
                 MARTY
-              </button>
-
-              <button
-                onClick={startNewChat}
-                className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-[11px] font-medium text-blue-300 transition hover:border-blue-400/30 hover:bg-blue-500/15"
-                type="button"
-              >
-                New chat
-              </button>
+              </span>
             </div>
 
             <h1 className="mt-5 max-w-xs text-2xl font-semibold leading-tight text-white">
@@ -299,6 +422,16 @@ export default function Page() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <div className="mb-3 px-2">
+              <button
+                onClick={startNewChat}
+                className="w-full rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-left text-sm font-medium text-blue-300 transition hover:border-blue-400/30 hover:bg-blue-500/15"
+                type="button"
+              >
+                New chat
+              </button>
+            </div>
+
             <p className="px-2 pb-2 text-[11px] font-medium uppercase tracking-[0.28em] text-white/35">
               Recents
             </p>
@@ -325,7 +458,8 @@ export default function Page() {
                       {conversation.title}
                     </p>
                     <p className="mt-1 text-xs text-white/35">
-                      {conversation.messages.length} message{conversation.messages.length === 1 ? "" : "s"}
+                      {conversation.messages.length} message
+                      {conversation.messages.length === 1 ? "" : "s"}
                     </p>
                   </button>
                 );
@@ -334,7 +468,50 @@ export default function Page() {
           </div>
         </aside>
 
-        <section className="flex min-h-0 flex-1 flex-col bg-black/20">
+        <section className="relative flex min-h-0 flex-1 flex-col bg-black/20">
+          {activePanel && (
+            <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/55 px-4 py-6 backdrop-blur-sm sm:px-6 sm:py-8">
+              <div className="w-full max-w-xl overflow-hidden rounded-[32px] border border-blue-500/20 bg-[#09101a]/95 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
+                <div className="flex items-start justify-between gap-4 border-b border-blue-500/15 px-5 py-5 sm:px-6">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.28em] text-blue-300/75">
+                      MARTY
+                    </p>
+                    <h2 className="mt-3 text-2xl font-semibold leading-tight text-white">
+                      {menuItems[activePanel].label}
+                    </h2>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-white/55">
+                      {menuItems[activePanel].description}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={closePanel}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-300 transition hover:border-blue-400/30 hover:bg-blue-500/15"
+                    aria-label="Close panel"
+                    type="button"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      className="h-5 w-5"
+                    >
+                      <path strokeLinecap="round" d="M6 6l12 12" />
+                      <path strokeLinecap="round" d="M18 6 6 18" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="space-y-4 px-5 py-5 text-[15px] leading-7 text-white/82 sm:px-6 sm:py-6 sm:text-base">
+                  {menuItems[activePanel].content}
+                </div>
+              </div>
+            </div>
+          )}
+
           <header className="shrink-0 border-b border-blue-500/20 px-4 py-2.5 sm:px-6 sm:py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -359,22 +536,108 @@ export default function Page() {
                 </button>
 
                 <div>
-                  <button
-                    onClick={startNewChat}
-                    className="text-left text-sm font-bold uppercase tracking-[0.35em] text-blue-400 transition hover:text-blue-300"
-                    type="button"
-                  >
+                  <span className="text-left text-sm font-bold uppercase tracking-[0.35em] text-blue-400">
                     MARTY
-                  </button>
+                  </span>
                   <p className="mt-1 text-xs tracking-[0.08em] text-white/55 sm:text-sm">
                     Not therapy. Not journaling. Not vibes.
                   </p>
                 </div>
               </div>
 
-              <p className="hidden text-xs text-white/35 sm:block">
-                Tap MARTY to start fresh.
-              </p>
+              <div ref={menuRef} className="relative">
+                <button
+                  onClick={() => setMenuOpen((prev) => !prev)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-300 transition hover:border-blue-400/30 hover:bg-blue-500/15"
+                  aria-label="Open MARTY menu"
+                  aria-expanded={menuOpen}
+                  aria-haspopup="menu"
+                  type="button"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-5 w-5"
+                  >
+                    <circle
+                      cx="5"
+                      cy="12"
+                      r="1.4"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="1.4"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <circle
+                      cx="19"
+                      cy="12"
+                      r="1.4"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                  </svg>
+                </button>
+
+                {menuOpen && (
+                  <div
+                    className="absolute right-0 top-[calc(100%+0.75rem)] z-30 w-[280px] overflow-hidden rounded-3xl border border-blue-500/20 bg-[#0a0f18]/95 p-2 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
+                    role="menu"
+                  >
+                    {(
+                      [
+                        "what-this-is",
+                        "how-to-use-this",
+                        "privacy",
+                        "give-feedback",
+                      ] as PanelKey[]
+                    ).map((itemKey) => {
+                      const item = menuItems[itemKey];
+
+                      return (
+                        <button
+                          key={itemKey}
+                          onClick={() => openPanel(itemKey)}
+                          className="flex w-full items-start justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-blue-500/10"
+                          role="menuitem"
+                          type="button"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-white">
+                              {item.label}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-white/45">
+                              {item.description}
+                            </p>
+                          </div>
+
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            className="mt-0.5 h-4 w-4 shrink-0 text-white/35"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="m9 6 6 6-6 6"
+                            />
+                          </svg>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -389,7 +652,9 @@ export default function Page() {
                 return (
                   <div
                     key={message.id}
-                    className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                    className={`flex ${
+                      isUser ? "justify-end" : "justify-start"
+                    }`}
                   >
                     <div className="max-w-[90%] sm:max-w-[80%]">
                       <div
