@@ -41,6 +41,9 @@ type MenuItem = {
   content: ReactNode;
 };
 
+const BETA_GATE_STORAGE_KEY = "marty-beta-gate-seen";
+const RETURN_NUDGE_STORAGE_KEY = "marty-return-nudge-seen";
+
 const formatTime = () =>
   new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -137,17 +140,25 @@ const menuItems: Record<PanelKey, MenuItem> = {
   },
   "give-feedback": {
     label: "Give feedback",
-    description: "Shape the voice while it is still being built.",
+    description: "Send proof, not vibes.",
     content: (
       <>
         <p>
-          Pay attention to what hits, what misses, and where MARTY gets too
-          soft, too vague, or too wordy.
+          Send screenshots + what happened to{" "}
+          <a
+            href="mailto:themartyapp@gmail.com?subject=MARTY%20Feedback&body=What%20was%20happening%20when%20you%20opened%20MARTY%3F%0A%0A1%E2%80%932%20screenshots%3A%0A%0ADid%20anything%20change%20after%20using%20it%3F"
+            className="font-medium text-blue-300 underline decoration-blue-400/40 underline-offset-4 transition hover:text-blue-200"
+          >
+            themartyapp@gmail.com
+          </a>
+          .
         </p>
-        <p>
-          The best feedback is specific: paste the reply, say what felt off, and
-          say what it should have done instead.
-        </p>
+        <p>When you send feedback, include:</p>
+        <ul className="list-disc space-y-2 pl-5 text-white/82">
+          <li>What was happening when you opened MARTY</li>
+          <li>1–2 screenshots</li>
+          <li>Did anything change after using it?</li>
+        </ul>
         <p>That is how this gets sharp.</p>
       </>
     ),
@@ -162,6 +173,9 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
+  const [betaGateOpen, setBetaGateOpen] = useState(false);
+  const [returnNudgeVisible, setReturnNudgeVisible] = useState(false);
+  const [hasSeenReturnNudge, setHasSeenReturnNudge] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
@@ -175,7 +189,9 @@ export default function Page() {
     );
   }, [conversations, currentChatId]);
 
-  const messages = currentConversation?.messages || [];
+  const messages = useMemo(() => {
+    return currentConversation?.messages ?? [];
+  }, [currentConversation]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     window.requestAnimationFrame(() => {
@@ -187,7 +203,32 @@ export default function Page() {
     const freshConversation = createConversation();
     setConversations([freshConversation]);
     setCurrentChatId(freshConversation.id);
+
+    if (typeof window === "undefined") return;
+
+    const hasSeenBetaGate = window.localStorage.getItem(BETA_GATE_STORAGE_KEY);
+    const hasSeenReturnNudge = window.localStorage.getItem(
+      RETURN_NUDGE_STORAGE_KEY
+    );
+
+    setBetaGateOpen(!hasSeenBetaGate);
+    setHasSeenReturnNudge(Boolean(hasSeenReturnNudge));
+    setReturnNudgeVisible(Boolean(hasSeenReturnNudge));
   }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    if (betaGateOpen) {
+      document.body.classList.add("no-scroll");
+    } else {
+      document.body.classList.remove("no-scroll");
+    }
+
+    return () => {
+      document.body.classList.remove("no-scroll");
+    };
+  }, [betaGateOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -214,6 +255,26 @@ export default function Page() {
     if (!currentChatId) return;
     scrollToBottom(messages.length > 1 ? "smooth" : "auto");
   }, [currentChatId, messages.length, loading, scrollToBottom]);
+
+  useEffect(() => {
+    if (hasSeenReturnNudge) return;
+
+    const userMessageCount = messages.filter(
+      (message) => message.sender === "user"
+    ).length;
+    const martyMessageCount = messages.filter(
+      (message) => message.sender === "marty"
+    ).length;
+
+    if (userMessageCount >= 1 && martyMessageCount >= 2) {
+      setReturnNudgeVisible(true);
+      setHasSeenReturnNudge(true);
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(RETURN_NUDGE_STORAGE_KEY, "true");
+      }
+    }
+  }, [hasSeenReturnNudge, messages]);
 
   const updateConversationMessages = (
     chatId: string,
@@ -247,6 +308,12 @@ export default function Page() {
     setSidebarOpen(false);
     setMenuOpen(false);
     setActivePanel(null);
+    setReturnNudgeVisible(false);
+    setHasSeenReturnNudge(false);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(RETURN_NUDGE_STORAGE_KEY);
+    }
   };
 
   const openPanel = (panel: PanelKey) => {
@@ -256,6 +323,14 @@ export default function Page() {
 
   const closePanel = () => {
     setActivePanel(null);
+  };
+
+  const handleStartBeta = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(BETA_GATE_STORAGE_KEY, "true");
+    }
+
+    setBetaGateOpen(false);
   };
 
   const handleComposerFocus = () => {
@@ -388,34 +463,34 @@ export default function Page() {
 
   return (
     <main
-      className="overflow-hidden bg-[#05070b] text-white"
+      className="overflow-hidden bg-[#05070b] text-white selection:bg-blue-400/20 selection:text-white"
       style={{ height: viewportHeight ? `${viewportHeight}px` : "100dvh" }}
     >
-      <div className="mx-auto flex h-full w-full max-w-6xl overflow-hidden">
+      <div className="mx-auto flex h-full w-full max-w-7xl overflow-hidden">
         <div
-          className={`fixed inset-0 z-30 bg-black/60 backdrop-blur-sm transition lg:hidden ${
+          className={`fixed inset-0 z-30 bg-[#02040a]/72 backdrop-blur-md transition lg:hidden ${
             sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
           onClick={() => setSidebarOpen(false)}
         />
 
         <aside
-          className={`fixed inset-y-0 left-0 z-40 flex w-73 shrink-0 flex-col border-r border-blue-500/20 bg-[#06080d]/95 backdrop-blur-xl transition-transform lg:static lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-40 flex w-73 shrink-0 flex-col border-r border-white/8 bg-[linear-gradient(180deg,rgba(14,20,34,0.96)_0%,rgba(7,10,17,0.98)_100%)] shadow-[0_20px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl transition-transform lg:static lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <div className="border-b border-blue-500/20 px-5 pb-5 pt-6">
+          <div className="border-b border-white/8 px-5 pb-6 pt-6">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-left text-sm font-semibold uppercase tracking-[0.35em] text-blue-400">
+              <span className="bg-linear-to-r from-blue-200 via-blue-300 to-blue-500 bg-clip-text text-left text-sm font-semibold uppercase tracking-[0.35em] text-transparent">
                 MARTY
               </span>
             </div>
 
-            <h1 className="mt-5 max-w-xs text-2xl font-semibold leading-tight text-white">
+            <h1 className="mt-5 max-w-xs text-[1.7rem] font-semibold leading-[1.08] text-white sm:text-[1.85rem]">
               The accountability layer between impulse and consequence.
             </h1>
 
-            <p className="mt-4 max-w-sm text-sm leading-6 text-white/72">
+            <p className="mt-4 max-w-sm text-sm leading-6 text-white/62">
               MARTY notices your patterns, calls you out, and keeps you honest.
               Every visit starts clean.
             </p>
@@ -425,14 +500,14 @@ export default function Page() {
             <div className="mb-3 px-2">
               <button
                 onClick={startNewChat}
-                className="w-full rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-left text-sm font-medium text-blue-300 transition hover:border-blue-400/30 hover:bg-blue-500/15"
+                className="w-full rounded-2xl border border-white/10 bg-white/4.5 px-4 py-3 text-left text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-blue-400/25 hover:bg-blue-500/10 hover:text-blue-100"
                 type="button"
               >
                 New chat
               </button>
             </div>
 
-            <p className="px-2 pb-2 text-[11px] font-medium uppercase tracking-[0.28em] text-white/35">
+            <p className="px-2 pb-2 text-[11px] font-medium uppercase tracking-[0.28em] text-white/28">
               Recents
             </p>
 
@@ -449,8 +524,8 @@ export default function Page() {
                     }}
                     className={`w-full rounded-2xl px-3 py-3 text-left transition ${
                       isActive
-                        ? "border border-blue-500/25 bg-blue-500/10"
-                        : "border border-transparent bg-white/2 hover:border-blue-500/15 hover:bg-white/4"
+                        ? "border border-blue-400/20 bg-[linear-gradient(180deg,rgba(59,130,246,0.12)_0%,rgba(59,130,246,0.06)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                        : "border border-transparent bg-white/2 hover:border-white/8 hover:bg-white/4.5"
                     }`}
                     type="button"
                   >
@@ -468,26 +543,96 @@ export default function Page() {
           </div>
         </aside>
 
-        <section className="relative flex min-h-0 flex-1 flex-col bg-black/20">
+        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(39,78,145,0.16),transparent_32%),linear-gradient(180deg,rgba(8,11,19,0.92)_0%,rgba(5,7,11,0.98)_100%)]">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-8%,rgba(96,165,250,0.14),transparent_34%),radial-gradient(circle_at_78%_22%,rgba(59,130,246,0.09),transparent_28%),radial-gradient(circle_at_18%_78%,rgba(14,165,233,0.05),transparent_24%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_54%,rgba(2,6,23,0.14)_78%,rgba(2,6,23,0.34)_100%)]" />
+            <div
+              className="absolute inset-0 opacity-[0.04] mix-blend-soft-light"
+              style={{
+                backgroundImage:
+                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")",
+                backgroundSize: "180px 180px",
+              }}
+            />
+          </div>
+          {betaGateOpen && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#03050b]/78 px-4 py-6 backdrop-blur-md sm:px-6">
+              <div className="w-full max-w-lg overflow-hidden rounded-4xl border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,30,0.98)_0%,rgba(8,12,21,0.98)_100%)] shadow-[0_30px_120px_rgba(0,0,0,0.58),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl">
+                <div className="border-b border-white/8 px-5 py-5 sm:px-6">
+                  <p className="bg-linear-to-r from-blue-200 via-blue-300 to-blue-500 bg-clip-text text-[11px] font-medium uppercase tracking-[0.28em] text-transparent">
+                    MARTY Beta
+                  </p>
+                </div>
+
+                <div className="space-y-5 px-5 py-5 text-[15px] leading-7 text-white/84 sm:px-6 sm:py-6 sm:text-base">
+                  <div className="space-y-3">
+                    <p>This is not therapy. This is not journaling.</p>
+                    <p>
+                      Use this when something is actually happening — not when
+                      you’re calm and thinking about life.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p>Try it:</p>
+                    <ul className="list-disc space-y-2 pl-5 text-white/82">
+                      <li>when you’re looping</li>
+                      <li>when you’re about to do something you’ll regret</li>
+                      <li>when you’re avoiding something</li>
+                    </ul>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p>Don’t perform. Don’t try to sound good.</p>
+                    <p>Start with what’s true.</p>
+                    <p>
+                      If something shifts — even slightly — that’s the signal.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 border-t border-white/8 pt-4">
+                    <p className="text-sm leading-6 text-white/72">
+                      Send screenshots + what happened (if anything changed):
+                    </p>
+                    <a
+                      href="mailto:themartyapp@gmail.com?subject=MARTY%20Feedback&body=What%20was%20happening%20when%20you%20opened%20MARTY%3F%0A%0A1%E2%80%932%20screenshots%3A%0A%0ADid%20anything%20change%20after%20using%20it%3F"
+                      className="inline-flex text-sm font-medium text-blue-200 underline decoration-blue-400/30 underline-offset-4 transition hover:text-white"
+                    >
+                      themartyapp@gmail.com
+                    </a>
+                  </div>
+
+                  <button
+                    onClick={handleStartBeta}
+                    className="inline-flex w-full items-center justify-center rounded-full border border-blue-300/18 bg-[linear-gradient(180deg,#3b82f6_0%,#2563eb_100%)] px-4 py-3 text-base font-medium text-white shadow-[0_12px_30px_rgba(37,99,235,0.28),inset_0_1px_0_rgba(255,255,255,0.14)] transition hover:brightness-110"
+                    type="button"
+                  >
+                    Start
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {activePanel && (
-            <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/55 px-4 py-6 backdrop-blur-sm sm:px-6 sm:py-8">
-              <div className="w-full max-w-xl overflow-hidden rounded-[32px] border border-blue-500/20 bg-[#09101a]/95 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
-                <div className="flex items-start justify-between gap-4 border-b border-blue-500/15 px-5 py-5 sm:px-6">
+            <div className="absolute inset-0 z-40 flex items-start justify-center bg-[#03050b]/72 px-4 py-6 backdrop-blur-md sm:px-6 sm:py-8">
+              <div className="w-full max-w-xl overflow-hidden rounded-4xl border border-white/10 bg-[linear-gradient(180deg,rgba(12,17,29,0.98)_0%,rgba(8,12,21,0.98)_100%)] shadow-[0_24px_100px_rgba(0,0,0,0.56),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl">
+                <div className="flex items-start justify-between gap-4 border-b border-white/8 px-5 py-5 sm:px-6">
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-[0.28em] text-blue-300/75">
+                    <p className="bg-linear-to-r from-blue-200 via-blue-300 to-blue-500 bg-clip-text text-[11px] font-medium uppercase tracking-[0.28em] text-transparent">
                       MARTY
                     </p>
                     <h2 className="mt-3 text-2xl font-semibold leading-tight text-white">
                       {menuItems[activePanel].label}
                     </h2>
-                    <p className="mt-2 max-w-md text-sm leading-6 text-white/55">
+                    <p className="mt-2 max-w-md text-sm leading-6 text-white/48">
                       {menuItems[activePanel].description}
                     </p>
                   </div>
 
                   <button
                     onClick={closePanel}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-300 transition hover:border-blue-400/30 hover:bg-blue-500/15"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/4.5 text-blue-200 transition hover:border-white/14 hover:bg-white/8 hover:text-white"
                     aria-label="Close panel"
                     type="button"
                   >
@@ -512,12 +657,12 @@ export default function Page() {
             </div>
           )}
 
-          <header className="shrink-0 border-b border-blue-500/20 px-4 py-2.5 sm:px-6 sm:py-3">
+          <header className="relative z-10 shrink-0 border-b border-white/8 bg-black/10 px-4 py-3 backdrop-blur-xl sm:px-6">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSidebarOpen(true)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-300 transition hover:bg-blue-500/15 lg:hidden"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/4.5 text-blue-200 transition hover:bg-white/8 hover:text-white lg:hidden"
                   aria-label="Open recents"
                   type="button"
                 >
@@ -536,10 +681,10 @@ export default function Page() {
                 </button>
 
                 <div>
-                  <span className="text-left text-sm font-bold uppercase tracking-[0.35em] text-blue-400">
+                  <span className="bg-linear-to-r from-blue-200 via-blue-300 to-blue-500 bg-clip-text text-left text-sm font-bold uppercase tracking-[0.35em] text-transparent">
                     MARTY
                   </span>
-                  <p className="mt-1 text-xs tracking-[0.08em] text-white/55 sm:text-sm">
+                  <p className="mt-1 text-xs tracking-[0.08em] text-white/48 sm:text-sm">
                     Not therapy. Not journaling. Not vibes.
                   </p>
                 </div>
@@ -548,7 +693,7 @@ export default function Page() {
               <div ref={menuRef} className="relative">
                 <button
                   onClick={() => setMenuOpen((prev) => !prev)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-300 transition hover:border-blue-400/30 hover:bg-blue-500/15"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/4.5 text-blue-200 transition hover:border-white/14 hover:bg-white/8 hover:text-white"
                   aria-label="Open MARTY menu"
                   aria-expanded={menuOpen}
                   aria-haspopup="menu"
@@ -588,7 +733,7 @@ export default function Page() {
 
                 {menuOpen && (
                   <div
-                    className="absolute right-0 top-[calc(100%+0.75rem)] z-30 w-[280px] overflow-hidden rounded-3xl border border-blue-500/20 bg-[#0a0f18]/95 p-2 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
+                    className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-70 overflow-hidden rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,30,0.98)_0%,rgba(8,12,21,0.98)_100%)] p-2 shadow-[0_20px_80px_rgba(0,0,0,0.52),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl"
                     role="menu"
                   >
                     {(
@@ -605,7 +750,7 @@ export default function Page() {
                         <button
                           key={itemKey}
                           onClick={() => openPanel(itemKey)}
-                          className="flex w-full items-start justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-blue-500/10"
+                          className="flex w-full items-start justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-white/6"
                           role="menuitem"
                           type="button"
                         >
@@ -643,9 +788,9 @@ export default function Page() {
 
           <section
             ref={scrollContainerRef}
-            className="min-h-0 flex-1 overflow-y-auto px-4 py-5 pb-24 sm:px-6 sm:pb-28"
+            className="relative z-10 min-h-0 flex-1 overflow-y-auto px-4 py-6 pb-24 sm:px-6 sm:pb-28"
           >
-            <div className="space-y-3 sm:space-y-4">
+            <div className="space-y-4 sm:space-y-5">
               {messages.map((message) => {
                 const isUser = message.sender === "user";
 
@@ -656,12 +801,12 @@ export default function Page() {
                       isUser ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <div className="max-w-[90%] sm:max-w-[80%]">
+                    <div className="max-w-[90%] sm:max-w-[78%]">
                       <div
-                        className={`rounded-[28px] px-4 py-3 text-[15px] leading-[1.55] sm:px-5 sm:py-3.5 sm:text-base ${
+                        className={`rounded-[28px] px-4 py-3 text-[15px] leading-[1.62] shadow-[0_8px_30px_rgba(0,0,0,0.14)] sm:px-5 sm:py-3.5 sm:text-base ${
                           isUser
-                            ? "bg-white text-black"
-                            : "border border-blue-500/20 bg-blue-500/10 text-white"
+                            ? "border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(244,247,255,0.96)_100%)] text-black shadow-[0_10px_30px_rgba(0,0,0,0.16)]"
+                            : "border border-white/10 bg-[linear-gradient(180deg,rgba(30,41,59,0.84)_0%,rgba(18,25,39,0.92)_100%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.24)]"
                         }`}
                       >
                         {message.text}
@@ -681,16 +826,25 @@ export default function Page() {
 
               {loading && (
                 <div className="flex justify-start">
-                  <div className="rounded-[28px] border border-blue-500/20 bg-blue-500/10 px-5 py-3.5 text-[15px] text-white/60 sm:text-base">
+                  <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(30,41,59,0.84)_0%,rgba(18,25,39,0.92)_100%)] px-5 py-3.5 text-[15px] text-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.24)] sm:text-base">
                     MARTY is typing...
                   </div>
                 </div>
               )}
+
+              {returnNudgeVisible && !loading && (
+                <div className="flex justify-center pt-2">
+                  <p className="rounded-full border border-white/8 bg-white/[0.035] px-4 py-2 text-center text-xs tracking-[0.08em] text-white/46 backdrop-blur-sm">
+                    Come back when it’s real again.
+                  </p>
+                </div>
+              )}
+
               <div ref={bottomRef} />
             </div>
           </section>
 
-          <footer className="shrink-0 border-t border-blue-500/20 bg-[#05070b]/96 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl sm:px-6 sm:py-4">
+          <footer className="relative z-10 shrink-0 border-t border-white/8 bg-[linear-gradient(180deg,rgba(7,10,17,0.88)_0%,rgba(5,7,11,0.96)_100%)] p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-2xl sm:px-6 sm:py-4">
             <div className="flex items-end gap-2 sm:gap-3">
               <textarea
                 ref={inputRef}
@@ -703,7 +857,7 @@ export default function Page() {
                 autoCapitalize="sentences"
                 enterKeyHint="send"
                 placeholder="Text MARTY..."
-                className="min-w-0 max-h-40 flex-1 resize-none overflow-y-auto rounded-3xl border border-blue-500/20 bg-white/5 px-4 py-3 text-base leading-6 text-white outline-none backdrop-blur-md placeholder:text-white/35 focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/30 sm:px-5 sm:py-3.5"
+                className="min-w-0 max-h-40 flex-1 resize-none overflow-y-auto rounded-3xl border border-white/10 bg-white/4.5 px-4 py-3 text-base leading-6 text-white outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur-md placeholder:text-white/28 focus:border-blue-400/28 focus:bg-white/6 focus:ring-1 focus:ring-blue-400/18 sm:px-5 sm:py-3.5"
                 onInput={(e) => autoResizeTextarea(e.currentTarget)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -716,7 +870,7 @@ export default function Page() {
               <button
                 onClick={sendMessage}
                 disabled={loading}
-                className="shrink-0 rounded-full bg-blue-600 px-4 py-3 text-base text-white shadow-md transition hover:bg-blue-500 disabled:opacity-50 sm:px-6 sm:py-3.5"
+                className="shrink-0 rounded-full border border-blue-300/18 bg-[linear-gradient(180deg,#3b82f6_0%,#2563eb_100%)] px-4 py-3 text-base font-medium text-white shadow-[0_12px_30px_rgba(37,99,235,0.28),inset_0_1px_0_rgba(255,255,255,0.14)] transition hover:brightness-110 disabled:opacity-50 sm:px-6 sm:py-3.5"
                 type="button"
               >
                 Send
