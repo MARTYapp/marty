@@ -41,8 +41,8 @@ type MenuItem = {
   content: ReactNode;
 };
 
-const BETA_GATE_STORAGE_KEY = "marty-beta-gate-seen";
 const RETURN_NUDGE_STORAGE_KEY = "marty-return-nudge-seen";
+const CONVERSATIONS_STORAGE_KEY = "marty-conversations";
 
 const formatTime = () =>
   new Date().toLocaleTimeString([], {
@@ -200,18 +200,37 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    const freshConversation = createConversation();
-    setConversations([freshConversation]);
-    setCurrentChatId(freshConversation.id);
-
     if (typeof window === "undefined") return;
 
-    const hasSeenBetaGate = window.localStorage.getItem(BETA_GATE_STORAGE_KEY);
+    const saved = window.localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
     const hasSeenReturnNudge = window.localStorage.getItem(
       RETURN_NUDGE_STORAGE_KEY
     );
 
-    setBetaGateOpen(!hasSeenBetaGate);
+    if (saved) {
+      try {
+        const parsed: Conversation[] = JSON.parse(saved);
+
+        if (parsed.length > 0) {
+          setConversations(parsed);
+          setCurrentChatId(parsed[0]?.id || "");
+        } else {
+          const freshConversation = createConversation();
+          setConversations([freshConversation]);
+          setCurrentChatId(freshConversation.id);
+        }
+      } catch {
+        const freshConversation = createConversation();
+        setConversations([freshConversation]);
+        setCurrentChatId(freshConversation.id);
+      }
+    } else {
+      const freshConversation = createConversation();
+      setConversations([freshConversation]);
+      setCurrentChatId(freshConversation.id);
+    }
+
+    setBetaGateOpen(true);
     setHasSeenReturnNudge(Boolean(hasSeenReturnNudge));
     setReturnNudgeVisible(Boolean(hasSeenReturnNudge));
   }, []);
@@ -229,6 +248,16 @@ export default function Page() {
       document.body.classList.remove("no-scroll");
     };
   }, [betaGateOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!conversations.length) return;
+
+    window.localStorage.setItem(
+      CONVERSATIONS_STORAGE_KEY,
+      JSON.stringify(conversations)
+    );
+  }, [conversations]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -313,6 +342,10 @@ export default function Page() {
 
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(RETURN_NUDGE_STORAGE_KEY);
+      window.localStorage.setItem(
+        CONVERSATIONS_STORAGE_KEY,
+        JSON.stringify([freshConversation])
+      );
     }
   };
 
@@ -326,10 +359,6 @@ export default function Page() {
   };
 
   const handleStartBeta = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(BETA_GATE_STORAGE_KEY, "true");
-    }
-
     setBetaGateOpen(false);
   };
 
@@ -543,9 +572,9 @@ export default function Page() {
           </div>
         </aside>
 
-        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(39,78,145,0.16),transparent_32%),linear-gradient(180deg,rgba(8,11,19,0.92)_0%,rgba(5,7,11,0.98)_100%)]">
+        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.22),transparent_32%),linear-gradient(180deg,rgba(8,11,19,0.92)_0%,rgba(5,7,11,0.98)_100%)]">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-8%,rgba(96,165,250,0.14),transparent_34%),radial-gradient(circle_at_78%_22%,rgba(59,130,246,0.09),transparent_28%),radial-gradient(circle_at_18%_78%,rgba(14,165,233,0.05),transparent_24%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-8%,rgba(96,165,250,0.20),transparent_34%),radial-gradient(circle_at_78%_22%,rgba(59,130,246,0.09),transparent_28%),radial-gradient(circle_at_18%_78%,rgba(14,165,233,0.05),transparent_24%)]" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_54%,rgba(2,6,23,0.14)_78%,rgba(2,6,23,0.34)_100%)]" />
             <div
               className="absolute inset-0 opacity-[0.04] mix-blend-soft-light"
@@ -556,16 +585,17 @@ export default function Page() {
               }}
             />
           </div>
+
           {betaGateOpen && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#03050b]/78 px-4 py-6 backdrop-blur-md sm:px-6">
-              <div className="w-full max-w-lg overflow-hidden rounded-4xl border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,30,0.98)_0%,rgba(8,12,21,0.98)_100%)] shadow-[0_30px_120px_rgba(0,0,0,0.58),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl">
+            <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#03050b]/78 px-4 py-4 backdrop-blur-md sm:items-center sm:px-6 sm:py-6">
+              <div className="mt-4 flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-4xl border border-white/10 bg-[linear-gradient(180deg,rgba(13,18,30,0.98)_0%,rgba(8,12,21,0.98)_100%)] shadow-[0_30px_120px_rgba(0,0,0,0.58),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl sm:mt-0 sm:max-h-[min(860px,calc(100dvh-3rem))]">
                 <div className="border-b border-white/8 px-5 py-5 sm:px-6">
                   <p className="bg-linear-to-r from-blue-200 via-blue-300 to-blue-500 bg-clip-text text-[11px] font-medium uppercase tracking-[0.28em] text-transparent">
                     MARTY Beta
                   </p>
                 </div>
 
-                <div className="space-y-5 px-5 py-5 text-[15px] leading-7 text-white/84 sm:px-6 sm:py-6 sm:text-base">
+                <div className="space-y-5 overflow-y-auto px-5 py-5 text-[15px] leading-7 text-white/84 sm:px-6 sm:py-6 sm:text-base">
                   <div className="space-y-3">
                     <p>This is not therapy. This is not journaling.</p>
                     <p>
@@ -614,6 +644,7 @@ export default function Page() {
               </div>
             </div>
           )}
+
           {activePanel && (
             <div className="absolute inset-0 z-40 flex items-start justify-center bg-[#03050b]/72 px-4 py-6 backdrop-blur-md sm:px-6 sm:py-8">
               <div className="w-full max-w-xl overflow-hidden rounded-4xl border border-white/10 bg-[linear-gradient(180deg,rgba(12,17,29,0.98)_0%,rgba(8,12,21,0.98)_100%)] shadow-[0_24px_100px_rgba(0,0,0,0.56),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl">
