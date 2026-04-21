@@ -83,88 +83,6 @@ const normalizeReplyText = (value: string) => {
   return value.replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
 };
 
-const menuItems: Record<PanelKey, MenuItem> = {
-  "what-this-is": {
-    label: "What this is",
-    description: "Direct accountability, not comfort theater.",
-    content: (
-      <>
-        <p>
-          MARTY is the accountability layer between impulse and consequence.
-        </p>
-        <p>
-          It is built to cut through spirals, shrink overwhelm, and push you
-          toward one honest next move.
-        </p>
-        <p>Not therapy. Not journaling. Not vibes. Direction.</p>
-      </>
-    ),
-  },
-  "how-to-use-this": {
-    label: "How to use this",
-    description: "Bring the truth. Keep it specific.",
-    content: (
-      <>
-        <p>Best inputs are blunt, real, and current.</p>
-        <p>
-          Say what is happening, what you want to avoid, or what you are about
-          to do.
-        </p>
-        <p>
-          Examples: “I want to text him.” “I’m about to go into Whole Foods.”
-          “My apartment is a mess and I’m frozen.”
-        </p>
-        <p>
-          MARTY works best when it can name the pattern and give you one move,
-          not ten.
-        </p>
-      </>
-    ),
-  },
-  privacy: {
-    label: "Privacy",
-    description: "Clarity about what belongs here.",
-    content: (
-      <>
-        <p>
-          Treat MARTY like a serious product, not a diary you dump your whole
-          life into.
-        </p>
-        <p>
-          Share what is needed for the moment. Skip anything you would not want
-          floating around in a product you are still shaping.
-        </p>
-        <p>Keep it useful. Keep it intentional.</p>
-      </>
-    ),
-  },
-  "give-feedback": {
-    label: "Give feedback",
-    description: "Send proof, not vibes.",
-    content: (
-      <>
-        <p>
-          Send screenshots + what happened to{" "}
-          <a
-            href="mailto:themartyapp@gmail.com?subject=MARTY%20Feedback&body=What%20was%20happening%20when%20you%20opened%20MARTY%3F%0A%0A1%E2%80%932%20screenshots%3A%0A%0ADid%20anything%20change%20after%20using%20it%3F"
-            className="font-medium text-blue-300 underline decoration-blue-400/40 underline-offset-4 transition hover:text-blue-200"
-          >
-            themartyapp@gmail.com
-          </a>
-          .
-        </p>
-        <p>When you send feedback, include:</p>
-        <ul className="list-disc space-y-2 pl-5 text-white/82">
-          <li>What was happening when you opened MARTY</li>
-          <li>1–2 screenshots</li>
-          <li>Did anything change after using it?</li>
-        </ul>
-        <p>That is how this gets sharp.</p>
-      </>
-    ),
-  },
-};
-
 export default function Page() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string>("");
@@ -176,6 +94,7 @@ export default function Page() {
   const [betaGateOpen, setBetaGateOpen] = useState(false);
   const [returnNudgeVisible, setReturnNudgeVisible] = useState(false);
   const [hasSeenReturnNudge, setHasSeenReturnNudge] = useState(false);
+  const [feedbackCopied, setFeedbackCopied] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
@@ -192,6 +111,11 @@ export default function Page() {
   const messages = useMemo(() => {
     return currentConversation?.messages ?? [];
   }, [currentConversation]);
+
+  const latestMartyReply = useMemo(() => {
+    const reversed = [...messages].reverse();
+    return reversed.find((message) => message.sender === "marty");
+  }, [messages]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     window.requestAnimationFrame(() => {
@@ -305,6 +229,16 @@ export default function Page() {
     }
   }, [hasSeenReturnNudge, messages]);
 
+  useEffect(() => {
+    if (!feedbackCopied) return;
+
+    const timeout = window.setTimeout(() => {
+      setFeedbackCopied(false);
+    }, 2500);
+
+    return () => window.clearTimeout(timeout);
+  }, [feedbackCopied]);
+
   const updateConversationMessages = (
     chatId: string,
     updater: (messages: Message[]) => Message[]
@@ -339,6 +273,7 @@ export default function Page() {
     setActivePanel(null);
     setReturnNudgeVisible(false);
     setHasSeenReturnNudge(false);
+    setFeedbackCopied(false);
 
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(RETURN_NUDGE_STORAGE_KEY);
@@ -356,6 +291,7 @@ export default function Page() {
 
   const closePanel = () => {
     setActivePanel(null);
+    setFeedbackCopied(false);
   };
 
   const handleStartBeta = () => {
@@ -371,6 +307,34 @@ export default function Page() {
   const autoResizeTextarea = (target: HTMLTextAreaElement) => {
     target.style.height = "0px";
     target.style.height = `${Math.min(target.scrollHeight, 160)}px`;
+  };
+
+  const handleFeedbackEmail = async () => {
+    const replyToCopy =
+      latestMartyReply?.text || "No MARTY reply yet. Describe what happened.";
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(replyToCopy);
+        setFeedbackCopied(true);
+      } catch {
+        setFeedbackCopied(false);
+      }
+    }
+
+    const body = [
+      "Paste the reply here:",
+      "",
+      replyToCopy,
+      "",
+      "What felt off:",
+      "",
+      "What should it have done:",
+    ].join("\n");
+
+    window.location.href = `mailto:themartyapp@gmail.com?subject=${encodeURIComponent(
+      "MARTY Feedback"
+    )}&body=${encodeURIComponent(body)}`;
   };
 
   useEffect(() => {
@@ -488,6 +452,125 @@ export default function Page() {
     }
 
     fetchReply(userText, nextMessages, currentChatId);
+  };
+
+  const menuItems: Record<PanelKey, MenuItem> = {
+    "what-this-is": {
+      label: "What this is",
+      description: "Direct accountability, not comfort theater.",
+      content: (
+        <>
+          <p>
+            MARTY is the accountability layer between impulse and consequence.
+          </p>
+          <p>
+            It is built to cut through spirals, shrink overwhelm, and push you
+            toward one honest next move.
+          </p>
+          <p>Not therapy. Not journaling. Not vibes. Direction.</p>
+        </>
+      ),
+    },
+    "how-to-use-this": {
+      label: "How to use this",
+      description: "Bring the truth. Keep it specific.",
+      content: (
+        <>
+          <p>Best inputs are blunt, real, and current.</p>
+          <p>
+            Say what is happening, what you want to avoid, or what you are about
+            to do.
+          </p>
+          <p>
+            Examples: “I want to text him.” “I’m about to go into Whole Foods.”
+            “My apartment is a mess and I’m frozen.”
+          </p>
+          <p>
+            MARTY works best when it can name the pattern and give you one move,
+            not ten.
+          </p>
+        </>
+      ),
+    },
+    privacy: {
+      label: "Privacy",
+      description: "Clarity about what belongs here.",
+      content: (
+        <>
+          <p>
+            Treat MARTY like a serious product, not a diary you dump your whole
+            life into.
+          </p>
+          <p>
+            Share what is needed for the moment. Skip anything you would not
+            want floating around in a product you are still shaping.
+          </p>
+          <p>Keep it useful. Keep it intentional.</p>
+        </>
+      ),
+    },
+    "give-feedback": {
+      label: "Give feedback",
+      description: "Send proof, not vibes.",
+      content: (
+        <>
+          <p>
+            Send screenshots + what happened to{" "}
+            <a
+              href="mailto:themartyapp@gmail.com?subject=MARTY%20Feedback&body=What%20was%20happening%20when%20you%20opened%20MARTY%3F%0A%0A1%E2%80%932%20screenshots%3A%0A%0ADid%20anything%20change%20after%20using%20it%3F"
+              className="font-medium text-blue-300 underline decoration-blue-400/40 underline-offset-4 transition hover:text-blue-200"
+            >
+              themartyapp@gmail.com
+            </a>
+            .
+          </p>
+
+          <p>When you send feedback, include:</p>
+
+          <ul className="list-disc space-y-2 pl-5 text-white/82">
+            <li>What was happening when you opened MARTY</li>
+            <li>1–2 screenshots</li>
+            <li>Did anything change after using it?</li>
+          </ul>
+
+          <div className="space-y-3">
+            <p>That is how this gets sharp.</p>
+
+            <div className="border-t border-white/8 pt-3">
+              <p className="text-sm text-white/60">Send it to:</p>
+              <a
+                href="mailto:themartyapp@gmail.com?subject=MARTY%20Feedback"
+                className="mt-1 inline-flex text-sm font-medium text-blue-300 underline decoration-blue-400/40 underline-offset-4 transition hover:text-blue-200"
+              >
+                themartyapp@gmail.com
+              </a>
+            </div>
+
+            <div className="border-t border-white/8 pt-4">
+              <p className="text-sm leading-6 text-white/60">
+                One tap: copy the last MARTY reply and open an email draft.
+              </p>
+
+              <button
+                onClick={handleFeedbackEmail}
+                className="mt-3 inline-flex items-center justify-center rounded-full border border-blue-300/18 bg-[linear-gradient(180deg,#3b82f6_0%,#2563eb_100%)] px-4 py-2.5 text-sm font-medium text-white shadow-[0_12px_30px_rgba(37,99,235,0.22),inset_0_1px_0_rgba(255,255,255,0.14)] transition hover:brightness-110"
+                type="button"
+              >
+                Copy last reply + email feedback
+              </button>
+
+              <p className="mt-2 text-xs text-white/45">
+                {feedbackCopied
+                  ? "Last MARTY reply copied."
+                  : latestMartyReply
+                  ? "Uses the latest MARTY reply from this chat."
+                  : "No MARTY reply yet — it will still open the email draft."}
+              </p>
+            </div>
+          </div>
+        </>
+      ),
+    },
   };
 
   return (
