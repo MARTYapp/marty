@@ -19,6 +19,8 @@ export type ResponseStyle = {
       responseStyle?.concise
         ? "Keep it concise unless the user clearly needs more."
         : "Length can expand when needed.",
+      "Start with one brief recognition sentence that names the user's internal conflict or hesitation, then move to direction.",
+      "Do not jump straight to conclusions or directives without first showing you understand the user's situation in one concise line.",
       "If a question is not necessary, do not ask one.",
       "Never ask more than one question mark in a reply unless the user explicitly asks for brainstorming or multiple options.",
     ].join(" ");
