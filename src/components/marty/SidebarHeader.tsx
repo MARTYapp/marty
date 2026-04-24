@@ -44,7 +44,7 @@ export default function SidebarHeader({
         <p className="mt-1 text-xs leading-5 text-white/38">
           {hasRecents
             ? `${conversationCount} saved chats`
-            : "Start clean. Come back when it’s real."}
+            : "Start clean. Use this when something’s actually happening."}
         </p>
       </div>
 
